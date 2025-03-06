@@ -1,0 +1,52 @@
+# Barbershop Booking Platform - Lista de Tarefas Pendentes
+
+## Prioridade Alta
+- [ ] Implementar autenticação completa com Supabase Auth
+- [ ] Adicionar validação de formulários com Zod ou Yup
+- [ ] Implementar sistema de notificações por email para confirmação de agendamentos
+- [ ] Adicionar verificação de conflitos de horários na API de agendamentos
+- [ ] Implementar sistema de cache para melhorar performance
+- [ ] Adicionar testes unitários e de integração
+
+## Funcionalidades
+- [ ] Implementar sistema de SMS para lembretes de agendamentos
+- [ ] Adicionar sistema de avaliações para profissionais
+- [ ] Implementar programa de fidelidade com pontos por agendamento
+- [ ] Adicionar opção de pagamento online com Stripe
+- [ ] Implementar sistema de cupons de desconto
+- [ ] Adicionar funcionalidade de lista de espera para horários ocupados
+- [ ] Implementar sistema de recomendação de serviços baseado no histórico do cliente
+
+## UI/UX
+- [ ] Melhorar responsividade em dispositivos móveis
+- [ ] Adicionar modo escuro
+- [ ] Implementar animações de transição entre páginas
+- [ ] Melhorar acessibilidade (WCAG 2.1 AA)
+- [ ] Adicionar feedback visual para ações do usuário
+- [ ] Implementar sistema de tour guiado para novos usuários
+
+## Técnico
+- [ ] Otimizar queries do Supabase para melhor performance
+- [ ] Implementar sistema de logs para monitoramento
+- [ ] Adicionar tratamento de erros mais robusto
+- [ ] Implementar CI/CD com GitHub Actions
+- [ ] Adicionar monitoramento de performance com Vercel Analytics
+- [ ] Implementar PWA (Progressive Web App)
+- [ ] Adicionar internacionalização (i18n) para suporte a múltiplos idiomas
+
+## Segurança
+- [ ] Implementar rate limiting para APIs
+- [ ] Adicionar proteção contra CSRF
+- [ ] Implementar validação de entrada em todas as APIs
+- [ ] Adicionar autenticação em dois fatores
+- [ ] Implementar auditoria de ações sensíveis
+- [ ] Adicionar política de senhas fortes
+
+## Negócio
+- [ ] Implementar relatórios financeiros detalhados
+- [ ] Adicionar dashboard de análise de dados
+- [ ] Implementar sistema de marketing por email
+- [ ] Adicionar integração com Google Analytics
+- [ ] Implementar sistema de referência para novos clientes
+- [ ] Adicionar exportação de dados para Excel/CSV
+

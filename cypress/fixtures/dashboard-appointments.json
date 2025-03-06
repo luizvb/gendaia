@@ -1,0 +1,81 @@
+[
+  {
+    "id": "1",
+    "start_time": "2023-01-01T10:00:00Z",
+    "end_time": "2023-01-01T10:30:00Z",
+    "status": "completed",
+    "notes": null,
+    "client_id": "1",
+    "professional_id": "1",
+    "service_id": "1",
+    "business_id": "1",
+    "professionals": {
+      "id": "1",
+      "name": "Carlos Silva"
+    },
+    "services": {
+      "id": "1",
+      "name": "Corte de Cabelo",
+      "duration": 30,
+      "price": 35
+    },
+    "clients": {
+      "id": "1",
+      "name": "John Doe",
+      "phone": "123456789"
+    }
+  },
+  {
+    "id": "2",
+    "start_time": "2023-01-02T14:00:00Z",
+    "end_time": "2023-01-02T14:20:00Z",
+    "status": "scheduled",
+    "notes": null,
+    "client_id": "2",
+    "professional_id": "2",
+    "service_id": "2",
+    "business_id": "1",
+    "professionals": {
+      "id": "2",
+      "name": "André Santos"
+    },
+    "services": {
+      "id": "2",
+      "name": "Barba",
+      "duration": 20,
+      "price": 25
+    },
+    "clients": {
+      "id": "2",
+      "name": "Jane Smith",
+      "phone": "987654321"
+    }
+  },
+  {
+    "id": "3",
+    "start_time": "2023-01-03T16:00:00Z",
+    "end_time": "2023-01-03T16:50:00Z",
+    "status": "scheduled",
+    "notes": null,
+    "client_id": "3",
+    "professional_id": "3",
+    "service_id": "3",
+    "business_id": "1",
+    "professionals": {
+      "id": "3",
+      "name": "Marcos Oliveira"
+    },
+    "services": {
+      "id": "3",
+      "name": "Corte e Barba",
+      "duration": 50,
+      "price": 55
+    },
+    "clients": {
+      "id": "3",
+      "name": "Robert Johnson",
+      "phone": "555123456"
+    }
+  }
+]
+

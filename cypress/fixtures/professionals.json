@@ -1,0 +1,24 @@
+[
+  {
+    "id": "1",
+    "name": "Carlos Silva",
+    "specialty": "Corte Masculino",
+    "color": "#3b82f6",
+    "business_id": "1"
+  },
+  {
+    "id": "2",
+    "name": "André Santos",
+    "specialty": "Barba",
+    "color": "#10b981",
+    "business_id": "1"
+  },
+  {
+    "id": "3",
+    "name": "Marcos Oliveira",
+    "specialty": "Corte e Barba",
+    "color": "#f59e0b",
+    "business_id": "1"
+  }
+]
+

@@ -1,0 +1,35 @@
+[
+  {
+    "id": "1",
+    "name": "Corte de Cabelo",
+    "description": "Corte moderno com tesoura ou máquina",
+    "duration": 30,
+    "price": 35,
+    "business_id": "1"
+  },
+  {
+    "id": "2",
+    "name": "Barba",
+    "description": "Modelagem e acabamento com navalha",
+    "duration": 20,
+    "price": 25,
+    "business_id": "1"
+  },
+  {
+    "id": "3",
+    "name": "Corte e Barba",
+    "description": "Combo de corte de cabelo e barba",
+    "duration": 50,
+    "price": 55,
+    "business_id": "1"
+  },
+  {
+    "id": "4",
+    "name": "Tratamento Capilar",
+    "description": "Hidratação e tratamento para cabelos",
+    "duration": 40,
+    "price": 45,
+    "business_id": "1"
+  }
+]
+
