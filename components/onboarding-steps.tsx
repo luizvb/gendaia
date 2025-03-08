@@ -1,16 +1,15 @@
-import { Check } from "lucide-react"
+import { Check } from "lucide-react";
 
 interface OnboardingStepsProps {
-  currentStep: number
+  currentStep: number;
 }
 
 export function OnboardingSteps({ currentStep }: OnboardingStepsProps) {
   const steps = [
     { id: 1, name: "Organização" },
     { id: 2, name: "Plano" },
-    { id: 3, name: "Pagamento" },
-    { id: 4, name: "Concluído" },
-  ]
+    { id: 3, name: "Concluído" },
+  ];
 
   return (
     <div className="w-full">
@@ -23,8 +22,8 @@ export function OnboardingSteps({ currentStep }: OnboardingStepsProps) {
                   step.id < currentStep
                     ? "border-primary"
                     : step.id === currentStep
-                      ? "border-primary"
-                      : "border-border"
+                    ? "border-primary"
+                    : "border-border"
                 }`}
               >
                 <span
@@ -32,8 +31,8 @@ export function OnboardingSteps({ currentStep }: OnboardingStepsProps) {
                     step.id < currentStep
                       ? "text-primary"
                       : step.id === currentStep
-                        ? "text-primary"
-                        : "text-muted-foreground"
+                      ? "text-primary"
+                      : "text-muted-foreground"
                   }`}
                 >
                   {step.id < currentStep ? (
@@ -46,7 +45,11 @@ export function OnboardingSteps({ currentStep }: OnboardingStepsProps) {
                   )}
                 </span>
                 <span
-                  className={`text-sm ${step.id <= currentStep ? "text-muted-foreground" : "text-muted-foreground/60"}`}
+                  className={`text-sm ${
+                    step.id <= currentStep
+                      ? "text-muted-foreground"
+                      : "text-muted-foreground/60"
+                  }`}
                 >
                   Passo {step.id}
                 </span>
@@ -56,6 +59,5 @@ export function OnboardingSteps({ currentStep }: OnboardingStepsProps) {
         </ol>
       </nav>
     </div>
-  )
+  );
 }
-

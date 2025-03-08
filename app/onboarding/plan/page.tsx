@@ -82,7 +82,7 @@ export default function PlanSelectionPage() {
       await new Promise((resolve) => setTimeout(resolve, 1000));
 
       // Redirecionar para a próxima etapa
-      router.push("/onboarding/payment");
+      router.push("/onboarding/success");
     } catch (error) {
       console.error("Erro ao selecionar plano:", error);
     } finally {

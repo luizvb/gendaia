@@ -60,14 +60,8 @@ export async function middleware(request: NextRequest) {
       url.pathname = "/login";
       return NextResponse.redirect(url);
     }
-  } else if (isPublicRoute && !isOnboardingRoute) {
-    // Redirect authenticated users away from auth pages (except onboarding)
-    const url = request.nextUrl.clone();
-    url.pathname = "/dashboard";
-    return NextResponse.redirect(url);
-  } else if (user && request.nextUrl.pathname.startsWith("/api")) {
-    // For authenticated API requests, fetch the business_id from the profile
-    // and attach it to the request
+  } else {
+    // Primeiro, verifica o business_id para qualquer rota autenticada
     try {
       const { data: profile } = await supabase
         .from("profiles")
@@ -75,8 +69,21 @@ export async function middleware(request: NextRequest) {
         .eq("user_id", user.id)
         .single();
 
-      if (profile?.business_id) {
-        // Clone the request to modify headers
+      // Se não tem business_id e não está na rota de onboarding ou na API de business
+      const isBusinessApiRoute =
+        request.nextUrl.pathname.startsWith("/api/business");
+      if (!profile?.business_id && !isOnboardingRoute && !isBusinessApiRoute) {
+        const url = request.nextUrl.clone();
+        url.pathname = "/onboarding";
+        return NextResponse.redirect(url);
+      }
+
+      // Se tem business_id e é uma requisição API (exceto API de business), adiciona o header
+      if (
+        profile?.business_id &&
+        request.nextUrl.pathname.startsWith("/api") &&
+        !isBusinessApiRoute
+      ) {
         const requestWithBusinessId = new Request(request.url, {
           headers: new Headers(request.headers),
           method: request.method,
@@ -84,17 +91,20 @@ export async function middleware(request: NextRequest) {
           redirect: request.redirect,
           signal: request.signal,
         });
-
-        // Add business_id to a custom header
         requestWithBusinessId.headers.set("x-business-id", profile.business_id);
-
-        // Create a new response with the modified request
         supabaseResponse = NextResponse.next({
           request: requestWithBusinessId,
         });
       }
     } catch (error) {
       console.error("Error fetching business_id in middleware:", error);
+    }
+
+    // Redireciona usuários autenticados para fora das páginas públicas
+    if (isPublicRoute && !isOnboardingRoute) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/dashboard";
+      return NextResponse.redirect(url);
     }
   }
 

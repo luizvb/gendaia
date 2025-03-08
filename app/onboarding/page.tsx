@@ -78,17 +78,17 @@ export default function OnboardingPage() {
             Criar sua Organização
           </CardTitle>
           <CardDescription>
-            Vamos configurar sua GENDAIA na plataforma
+            Vamos configurar seu negócio na plataforma
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="name">Nome da GENDAIA</Label>
+              <Label htmlFor="name">Nome do negócio</Label>
               <Input
                 id="name"
                 name="name"
-                placeholder="Ex: GENDAIA Modelo"
+                placeholder="Ex: Dr. João da Silva, Estética, Barbearia"
                 value={formData.name}
                 onChange={handleInputChange}
                 required
@@ -99,7 +99,7 @@ export default function OnboardingPage() {
               <Input
                 id="description"
                 name="description"
-                placeholder="Ex: GENDAIA especializada em cortes modernos"
+                placeholder="Ex: Especialidade em atendimento ao cliente"
                 value={formData.description}
                 onChange={handleInputChange}
               />
@@ -132,7 +132,7 @@ export default function OnboardingPage() {
                 id="email"
                 name="email"
                 type="email"
-                placeholder="Ex: contato@GENDAIA.com"
+                placeholder="Ex: contato@gendaia.com"
                 value={formData.email}
                 onChange={handleInputChange}
               />
