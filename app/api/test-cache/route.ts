@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createCachedGetHandler } from "@/lib/api-cache";
 
+// Force dynamic rendering for this route
+export const dynamic = "force-dynamic";
+
 // Handler simples para teste
 async function testHandler(request: NextRequest) {
   console.log(

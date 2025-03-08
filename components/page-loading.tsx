@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { SplashScreen } from "@/components/splash-screen";
 
-export function PageLoading() {
+// Create a client component that uses useSearchParams
+function PageLoadingContent() {
   const [isChangingRoute, setIsChangingRoute] = useState(false);
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -68,4 +69,13 @@ export function PageLoading() {
   }
 
   return null;
+}
+
+// Export a component that wraps the content in a Suspense boundary
+export function PageLoading() {
+  return (
+    <Suspense fallback={<SplashScreen subtitle="Carregando..." />}>
+      <PageLoadingContent />
+    </Suspense>
+  );
 }

@@ -6,6 +6,7 @@ import { ApiLoadingProvider } from "@/components/api-loading-provider";
 import { ThemeProvider } from "@/components/theme-provider";
 import { PageLoading } from "@/components/page-loading";
 import { SWRProvider } from "@/components/swr-provider";
+import { Suspense } from "react";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -37,7 +38,9 @@ export default function RootLayout({
             <ApiLoadingProvider>
               <PageLoading />
               <main className="transition-all duration-300 ease-in-out">
-                {children}
+                <Suspense fallback={<div className="p-4">Carregando...</div>}>
+                  {children}
+                </Suspense>
               </main>
             </ApiLoadingProvider>
           </SWRProvider>

@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { createCachedApiHandler } from "@/lib/cache";
 import { createClient } from "@/lib/supabase/server";
 
+// Force dynamic rendering for this route
+export const dynamic = "force-dynamic";
+
 // Define the handler function
 async function dashboardHandler(request: NextRequest) {
   try {
