@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { addDays, addHours, format, isSameDay, startOfWeek } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
@@ -65,14 +65,6 @@ export function CalendarView() {
 
   const calendarContainerRef = useRef<HTMLDivElement>(null);
 
-  // Buscar profissionais, serviços e agendamentos
-  useEffect(() => {
-    fetchProfessionals();
-    fetchServices();
-    fetchAppointments();
-    fetchClients();
-  }, [currentDate, view]);
-
   // Buscar clientes quando o termo de busca mudar
   useEffect(() => {
     if (clientSearchTerm.length >= 2) {
@@ -122,7 +114,6 @@ export function CalendarView() {
 
   const fetchAppointments = async () => {
     try {
-      setIsLoading(true);
       const startDate =
         view === "day"
           ? format(currentDate, "yyyy-MM-dd")
@@ -148,8 +139,6 @@ export function CalendarView() {
     } catch (error) {
       console.error("Erro ao carregar agendamentos:", error);
       toast.error("Não foi possível carregar os agendamentos");
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -159,16 +148,15 @@ export function CalendarView() {
     fetchAppointments();
   };
 
-  // Calcular o início da semana (domingo)
-  const weekStart = startOfWeek(currentDate, { locale: ptBR });
+  const weekDays = useMemo(() => {
+    const weekStart = startOfWeek(currentDate, { locale: ptBR });
+    return Array.from({ length: 7 }).map((_, i) => addDays(weekStart, i));
+  }, [currentDate]); // Só recalcula quando currentDate muda
 
-  // Gerar os dias da semana
-  const weekDays = Array.from({ length: 7 }).map((_, i) =>
-    addDays(weekStart, i)
+  const daysToShow = useMemo(
+    () => (view === "day" ? [currentDate] : weekDays),
+    [view, weekDays, currentDate]
   );
-
-  // Gerar os dias para a visualização atual (dia único ou semana)
-  const daysToShow = view === "day" ? [currentDate] : weekDays;
 
   // Gerar os horários do dia
   const dayHours = Array.from({ length: 10 }).map((_, i) =>
@@ -186,23 +174,45 @@ export function CalendarView() {
   // Determinar quantos dias mostrar com base na largura da tela (para mobile)
   const [visibleDays, setVisibleDays] = useState(daysToShow);
 
+  const currentDateTimestamp = currentDate.getTime();
+
   useEffect(() => {
+    // Buscar dados quando currentDate ou view mudarem
+    const fetchData = async () => {
+      setIsLoading(true);
+      try {
+        await Promise.all([
+          fetchProfessionals(),
+          fetchServices(),
+          fetchAppointments(),
+          fetchClients(),
+        ]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [currentDateTimestamp, view]); // Usar timestamp para evitar chamadas desnecessárias
+
+  useEffect(() => {
+    // Atualizar visibleDays quando daysToShow mudar (agora memoizado)
+    setVisibleDays(daysToShow);
+  }, [daysToShow]);
+
+  useEffect(() => {
+    // Lidar com resize e atualizar visibleDays conforme necessário
     const handleResize = () => {
-      // Em telas pequenas no modo semana, mostrar apenas o dia atual e o próximo
       if (window.innerWidth < 640 && view === "week") {
         const todayIndex = weekDays.findIndex((day) =>
           isSameDay(day, new Date())
         );
-
-        // Se hoje estiver na semana atual, mostrar hoje e amanhã
         if (todayIndex >= 0 && todayIndex < 6) {
           setVisibleDays([weekDays[todayIndex], weekDays[todayIndex + 1]]);
         } else {
-          // Caso contrário, mostrar os dois primeiros dias da semana
           setVisibleDays(weekDays.slice(0, 2));
         }
       } else {
-        // Em telas maiores ou no modo dia, mostrar todos os dias
         setVisibleDays(daysToShow);
       }
     };
@@ -210,29 +220,29 @@ export function CalendarView() {
     handleResize();
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
-  }, [view, daysToShow, weekDays]);
+  }, [view, weekDays]); // weekDays agora memoizado
 
-  // Navegar para o dia/semana anterior
   const prev = () => {
-    if (view === "day") {
-      setCurrentDate(addDays(currentDate, -1));
-    } else {
-      setCurrentDate(addDays(currentDate, -7));
+    const newDate =
+      view === "day" ? addDays(currentDate, -1) : addDays(currentDate, -7);
+    if (!isSameDay(newDate, currentDate)) {
+      setCurrentDate(newDate);
     }
   };
 
-  // Navegar para o próximo dia/semana
   const next = () => {
-    if (view === "day") {
-      setCurrentDate(addDays(currentDate, 1));
-    } else {
-      setCurrentDate(addDays(currentDate, 7));
+    const newDate =
+      view === "day" ? addDays(currentDate, 1) : addDays(currentDate, 7);
+    if (!isSameDay(newDate, currentDate)) {
+      setCurrentDate(newDate);
     }
   };
 
-  // Navegar para hoje
   const today = () => {
-    setCurrentDate(new Date());
+    const now = new Date();
+    if (!isSameDay(now, currentDate)) {
+      setCurrentDate(now);
+    }
   };
 
   // Abrir modal de agendamento
@@ -252,26 +262,20 @@ export function CalendarView() {
   };
 
   // Verificar se há agendamento para um horário e profissional específico
-  const getAppointment = (date: Date, professionalId: string) => {
-    const appointment = appointments.find(
-      (appointment) =>
-        isSameDay(new Date(appointment.start_time), date) &&
-        new Date(appointment.start_time).getHours() === date.getHours() &&
-        appointment.professional_id.toString() === professionalId
-    );
 
-    // Debug only for the first hour of the day to avoid console spam
-    if (date.getHours() === 9 && date.getMinutes() === 0) {
-      console.log("Checking appointment:", {
-        date: date.toISOString(),
-        professionalId,
-        found: !!appointment,
-        appointmentsCount: appointments.length,
+  const getAppointment = useCallback(
+    (date: Date, professionalId: string) => {
+      return appointments.find((app) => {
+        const appDate = new Date(app.start_time);
+        return (
+          isSameDay(appDate, date) &&
+          appDate.getHours() === date.getHours() &&
+          app.professional_id.toString() === professionalId
+        );
       });
-    }
-
-    return appointment;
-  };
+    },
+    [appointments]
+  );
 
   // Obter o profissional pelo ID
   const getProfessional = (id: number | string) => {

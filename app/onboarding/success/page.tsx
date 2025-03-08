@@ -39,7 +39,7 @@ export default function SuccessPage() {
             Configuração Concluída!
           </CardTitle>
           <CardDescription>
-            Sua GendaIA foi configurada com sucesso. Você já pode começar a usar
+            Sua GENDAIA foi configurada com sucesso. Você já pode começar a usar
             a plataforma.
           </CardDescription>
         </CardHeader>

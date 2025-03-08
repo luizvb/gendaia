@@ -56,7 +56,7 @@ export function Sidebar({ className }: SidebarProps) {
             {!collapsed && (
               <Link href="/dashboard" className="flex items-center gap-2">
                 <span className="text-xl font-semibold tracking-tight">
-                  GendaIA
+                  GENDAIA
                 </span>
               </Link>
             )}
@@ -110,7 +110,7 @@ export function Sidebar({ className }: SidebarProps) {
             <div className="flex h-16 items-center border-b px-4">
               <Link href="/dashboard" className="flex items-center gap-2">
                 <span className="text-xl font-semibold tracking-tight">
-                  GendaIA
+                  GENDAIA
                 </span>
               </Link>
             </div>

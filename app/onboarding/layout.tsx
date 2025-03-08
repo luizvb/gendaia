@@ -18,12 +18,12 @@ export default function OnboardingLayout({
             height={32}
             className="rounded-md"
           />
-          <span className="text-lg font-semibold">GendaIA</span>
+          <span className="text-lg font-semibold">GENDAIA</span>
         </Link>
       </header>
       <main className="flex flex-1 flex-col p-4 md:p-8">{children}</main>
       <footer className="border-t py-4 text-center text-sm text-muted-foreground">
-        © {new Date().getFullYear()} GendaIA. Todos os direitos reservados.
+        © {new Date().getFullYear()} GENDAIA. Todos os direitos reservados.
       </footer>
     </div>
   );

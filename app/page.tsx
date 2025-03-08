@@ -176,7 +176,7 @@ export default function Home() {
                         </div>
                         <div className="rounded-lg bg-muted p-3">
                           <p className="text-sm">
-                            Olá! Sou a Gendaia. Como posso ajudar com seu com
+                            Olá! Sou a GENDAIA. Como posso ajudar com seu com
                             seu agendamento hoje?
                           </p>
                         </div>

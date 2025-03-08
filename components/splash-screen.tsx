@@ -14,7 +14,7 @@ interface SplashScreenProps {
 export function SplashScreen({
   minimumDisplayTime = 1000,
   logo = "/logo.svg",
-  title = "GendaIA",
+  title = "GENDAIA",
   subtitle,
 }: SplashScreenProps) {
   const [show, setShow] = useState(true);

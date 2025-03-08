@@ -40,12 +40,45 @@ export function ApiLoadingProvider({ children }: { children: ReactNode }) {
     const originalFetch = window.fetch;
 
     window.fetch = async (...args) => {
-      startLoading();
+      const [resource] = args;
+
+      // Get the pathname from the request URL
+      let pathname: string;
+      if (resource instanceof URL) {
+        pathname = resource.pathname;
+      } else if (typeof resource === "string") {
+        try {
+          // Handle both absolute and relative URLs
+          const url = resource.startsWith("http")
+            ? new URL(resource)
+            : new URL(resource, window.location.origin);
+          pathname = url.pathname;
+        } catch {
+          pathname = resource;
+        }
+      } else if (resource instanceof Request) {
+        pathname = new URL(resource.url).pathname;
+      } else {
+        pathname = "";
+      }
+
+      // Check if it's a chat route request
+      const isChatRequest =
+        pathname.includes("/chat") ||
+        pathname.includes("/audio") ||
+        pathname.includes("/transcribe");
+
+      if (!isChatRequest) {
+        startLoading();
+      }
+
       try {
         const response = await originalFetch(...args);
         return response;
       } finally {
-        stopLoading();
+        if (!isChatRequest) {
+          stopLoading();
+        }
       }
     };
 

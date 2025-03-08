@@ -23,12 +23,12 @@ import { TimeInput } from "@/components/time-input";
 
 export default function SettingsPage() {
   const [businessInfo, setBusinessInfo] = useState({
-    name: "GendaIA Modelo",
+    name: "GENDAIA Modelo",
     address: "Rua Exemplo, 123 - Centro",
     phone: "(11) 99999-9999",
-    email: "contato@GendaIA.com",
+    email: "contato@GENDAIA.com",
     description:
-      "GendaIA especializada em cortes masculinos modernos e tradicionais.",
+      "GENDAIA especializada em cortes masculinos modernos e tradicionais.",
   });
 
   const [businessHours, setBusinessHours] = useState({
@@ -101,15 +101,15 @@ export default function SettingsPage() {
           <TabsContent value="general">
             <Card>
               <CardHeader>
-                <CardTitle>Informações da GendaIA</CardTitle>
+                <CardTitle>Informações da GENDAIA</CardTitle>
                 <CardDescription>
-                  Configure as informações básicas da sua GendaIA.
+                  Configure as informações básicas da sua GENDAIA.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="grid gap-2">
-                    <Label htmlFor="name">Nome da GendaIA</Label>
+                    <Label htmlFor="name">Nome da GENDAIA</Label>
                     <Input
                       id="name"
                       name="name"
@@ -173,7 +173,7 @@ export default function SettingsPage() {
               <CardHeader>
                 <CardTitle>Horários de Funcionamento</CardTitle>
                 <CardDescription>
-                  Configure os horários de funcionamento da sua GendaIA.
+                  Configure os horários de funcionamento da sua GENDAIA.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">

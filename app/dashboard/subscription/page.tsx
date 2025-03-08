@@ -167,7 +167,7 @@ export default function SubscriptionPage() {
             <CardHeader>
               <CardTitle>Alterar Plano</CardTitle>
               <CardDescription>
-                Escolha o plano que melhor atende às necessidades da sua GendaIA
+                Escolha o plano que melhor atende às necessidades da sua GENDAIA
               </CardDescription>
             </CardHeader>
             <CardContent>

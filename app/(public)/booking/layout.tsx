@@ -15,7 +15,7 @@ export default function BookingLayout({
         <div className="flex items-center gap-4">
           <Link href="/" className="flex items-center gap-2">
             <span className="text-xl font-semibold tracking-tight">
-              GendaIA
+              GENDAIA
             </span>
           </Link>
         </div>
@@ -31,7 +31,7 @@ export default function BookingLayout({
         <div className="container flex flex-col items-center justify-center gap-4 px-4 md:px-6">
           <div className="text-center">
             <p className="text-sm text-muted-foreground">
-              © {new Date().getFullYear()} GendaIA. Todos os direitos
+              © {new Date().getFullYear()} GENDAIA. Todos os direitos
               reservados.
             </p>
           </div>

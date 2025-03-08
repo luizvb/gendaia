@@ -100,7 +100,7 @@ export default function PlanSelectionPage() {
             Escolha seu Plano
           </CardTitle>
           <CardDescription>
-            Selecione o plano que melhor atende às necessidades da sua GendaIA.
+            Selecione o plano que melhor atende às necessidades da sua GENDAIA.
             Todos os planos incluem um período de teste gratuito de 7 dias.
           </CardDescription>
         </CardHeader>

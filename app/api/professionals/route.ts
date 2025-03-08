@@ -105,9 +105,7 @@ export async function POST(request: NextRequest) {
       .insert([
         {
           name: body.name,
-          email: body.email || null,
-          phone: body.phone || null,
-          bio: body.bio || null,
+          color: body.color || null,
           business_id: businessId,
         },
       ])
@@ -178,9 +176,7 @@ export async function PUT(request: NextRequest) {
 
     // Only include fields that are provided
     if (body.name) updateData.name = body.name;
-    if (body.email !== undefined) updateData.email = body.email;
-    if (body.phone !== undefined) updateData.phone = body.phone;
-    if (body.bio !== undefined) updateData.bio = body.bio;
+    if (body.color !== undefined) updateData.color = body.color;
 
     // Update professional
     const { error } = await supabase
