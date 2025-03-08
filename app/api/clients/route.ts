@@ -143,7 +143,6 @@ export async function POST(request: NextRequest) {
           name: body.name,
           phone: body.phone,
           email: body.email || null,
-          notes: body.notes || null,
           business_id: businessId,
         },
       ])
@@ -210,7 +209,6 @@ export async function PUT(request: NextRequest) {
     if (body.name) updateData.name = body.name;
     if (body.phone) updateData.phone = body.phone;
     if (body.email !== undefined) updateData.email = body.email;
-    if (body.notes !== undefined) updateData.notes = body.notes;
 
     // If phone is being updated, check if it already exists
     if (body.phone) {

@@ -9,6 +9,8 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { AppointmentModal } from "./appointment-modal";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { cn } from "@/lib/utils";
 
 interface Professional {
   id: string;
@@ -62,6 +64,9 @@ export function CalendarView() {
   const [clients, setClients] = useState<Client[]>([]);
   const [clientSearchTerm, setClientSearchTerm] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedProfessional, setSelectedProfessional] = useState<
+    string | null
+  >(null);
 
   const calendarContainerRef = useRef<HTMLDivElement>(null);
 
@@ -261,11 +266,17 @@ export function CalendarView() {
     setIsModalOpen(true);
   };
 
-  // Verificar se há agendamento para um horário e profissional específico
+  const filteredAppointments = useMemo(() => {
+    if (!selectedProfessional) return appointments;
+    return appointments.filter(
+      (app) => app.professional_id.toString() === selectedProfessional
+    );
+  }, [appointments, selectedProfessional]);
 
+  // Verificar se há agendamento para um horário e profissional específico
   const getAppointment = useCallback(
     (date: Date, professionalId: string) => {
-      return appointments.find((app) => {
+      return filteredAppointments.find((app) => {
         const appDate = new Date(app.start_time);
         return (
           isSameDay(appDate, date) &&
@@ -274,7 +285,7 @@ export function CalendarView() {
         );
       });
     },
-    [appointments]
+    [filteredAppointments]
   );
 
   // Obter o profissional pelo ID
@@ -313,7 +324,7 @@ export function CalendarView() {
             {formatDateTitle()}
           </span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-4">
           <Tabs
             value={view}
             onValueChange={(v) => setView(v as "day" | "week")}
@@ -324,6 +335,40 @@ export function CalendarView() {
               <TabsTrigger value="week">Semana</TabsTrigger>
             </TabsList>
           </Tabs>
+          <div className="flex -space-x-2">
+            {professionals.map((professional) => (
+              <Avatar
+                key={professional.id}
+                className={cn(
+                  "h-8 w-8 border-2 border-background cursor-pointer hover:scale-105 transition-transform",
+                  selectedProfessional === professional.id &&
+                    "ring-2 ring-primary"
+                )}
+                onClick={() =>
+                  setSelectedProfessional(
+                    selectedProfessional === professional.id
+                      ? null
+                      : professional.id
+                  )
+                }
+                style={{
+                  backgroundColor: `${professional.color}20`,
+                }}
+              >
+                <AvatarImage
+                  src={`https://api.dicebear.com/7.x/initials/svg?seed=${professional.name}`}
+                />
+                <AvatarFallback
+                  style={{ backgroundColor: `${professional.color}20` }}
+                >
+                  {professional.name
+                    .split(" ")
+                    .map((n) => n[0])
+                    .join("")}
+                </AvatarFallback>
+              </Avatar>
+            ))}
+          </div>
           <Button
             onClick={() => setIsModalOpen(true)}
             className="gap-2 whitespace-nowrap"
@@ -392,98 +437,86 @@ export function CalendarView() {
               </div>
             ) : (
               <>
-                {/* Cabeçalho com nomes dos profissionais - visível apenas em telas maiores */}
-                <div className="hidden sm:flex border-b">
-                  {professionals.map((professional) => (
-                    <div
-                      key={professional.id}
-                      className="h-8 px-2 flex items-center text-xs font-medium"
-                      style={{
-                        width: `${100 / professionals.length}%`,
-                        backgroundColor: `${professional.color}20`,
-                      }}
-                    >
-                      {professional.name}
-                    </div>
-                  ))}
-                </div>
-
                 <div
                   className={`flex w-full ${view === "day" ? "" : "divide-x"}`}
                 >
                   {visibleDays.map((day, dayIndex) => (
                     <div key={dayIndex} className="flex-1 min-w-0">
-                      {professionals.length > 0 ? (
-                        professionals.map((professional) => (
-                          <div key={professional.id} className="border-b">
-                            <div className="sticky left-0 bg-muted/20 px-2 py-1 text-xs font-medium border-t sm:hidden">
-                              {professional.name}
-                            </div>
-                            {dayHours.map((hour, hourIndex) => {
-                              const currentHour = new Date(
-                                day.getFullYear(),
-                                day.getMonth(),
-                                day.getDate(),
-                                hour.getHours()
-                              );
-                              const appointment = getAppointment(
-                                currentHour,
-                                professional.id
-                              );
+                      {dayHours.map((hour, hourIndex) => {
+                        const currentHour = new Date(
+                          day.getFullYear(),
+                          day.getMonth(),
+                          day.getDate(),
+                          hour.getHours()
+                        );
 
-                              return (
-                                <div
-                                  key={hourIndex}
-                                  className={`group relative h-16 border-t border-dashed border-border first:border-t-0 ${
-                                    hourIndex === 0 ? "border-t-0" : ""
-                                  }`}
-                                  onClick={() =>
-                                    openAppointmentModal(
-                                      currentHour,
-                                      professional.id,
-                                      appointment
-                                    )
-                                  }
-                                >
-                                  {appointment ? (
-                                    <div
-                                      className="absolute inset-1 flex flex-col rounded-md p-1 text-xs text-white cursor-pointer"
-                                      style={{
-                                        backgroundColor: getProfessional(
-                                          appointment.professional_id
-                                        )?.color,
-                                      }}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        openAppointmentModal(
-                                          currentHour,
-                                          professional.id,
-                                          appointment
-                                        );
-                                      }}
-                                    >
+                        // Get all appointments for this time slot
+                        const timeSlotAppointments =
+                          filteredAppointments.filter((app) => {
+                            const appDate = new Date(app.start_time);
+                            return (
+                              isSameDay(appDate, currentHour) &&
+                              appDate.getHours() === currentHour.getHours()
+                            );
+                          });
+
+                        return (
+                          <div
+                            key={hourIndex}
+                            className={`group relative h-16 border-t border-dashed border-border first:border-t-0 ${
+                              hourIndex === 0 ? "border-t-0" : ""
+                            }`}
+                            onClick={() =>
+                              openAppointmentModal(
+                                currentHour,
+                                selectedProfessional || professionals[0]?.id
+                              )
+                            }
+                          >
+                            <div className="absolute inset-0 flex flex-col gap-1 p-1">
+                              {timeSlotAppointments.map((appointment) => {
+                                const professional = getProfessional(
+                                  appointment.professional_id
+                                );
+                                return (
+                                  <div
+                                    key={appointment.id}
+                                    className="flex-1 flex flex-col rounded-md p-1 text-xs text-white cursor-pointer hover:brightness-90 transition-all"
+                                    style={{
+                                      backgroundColor: professional?.color,
+                                    }}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      openAppointmentModal(
+                                        currentHour,
+                                        professional?.id || "",
+                                        appointment
+                                      );
+                                    }}
+                                  >
+                                    <div className="flex items-center gap-1">
                                       <span className="font-medium truncate">
                                         {appointment.clients.name}
                                       </span>
-                                      <span className="truncate">
-                                        {appointment.services.name}
+                                      <span className="text-[10px] opacity-75">
+                                        ({professional?.name})
                                       </span>
                                     </div>
-                                  ) : (
-                                    <div className="absolute inset-0 flex cursor-pointer items-center justify-center opacity-0 transition-opacity group-hover:opacity-100">
-                                      <Plus className="h-4 w-4" />
-                                    </div>
-                                  )}
+                                    <span className="truncate opacity-75">
+                                      {appointment.services.name}
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                              {timeSlotAppointments.length === 0 && (
+                                <div className="absolute inset-0 flex cursor-pointer items-center justify-center opacity-0 transition-opacity group-hover:opacity-100">
+                                  <Plus className="h-4 w-4" />
                                 </div>
-                              );
-                            })}
+                              )}
+                            </div>
                           </div>
-                        ))
-                      ) : (
-                        <div className="py-4 text-center text-sm text-muted-foreground">
-                          Nenhum profissional cadastrado
-                        </div>
-                      )}
+                        );
+                      })}
                     </div>
                   ))}
                 </div>
