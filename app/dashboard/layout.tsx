@@ -74,7 +74,7 @@ export default function DashboardLayout({
   };
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex h-screen overflow-hidden">
       <Sidebar className="z-30" />
       <div className="flex-1 flex flex-col min-w-0">
         <header className="sticky top-0 z-20 flex h-16 items-center border-b bg-background/80 px-4 backdrop-blur md:px-6">
@@ -245,24 +245,21 @@ export default function DashboardLayout({
             </div>
           </div>
         </header>
-        <div
-          className={cn(
-            "flex flex-1 transition-all duration-300",
-            "relative overflow-hidden"
-          )}
-        >
+        <div className={cn("flex flex-1 relative overflow-hidden")}>
           <main
             className={cn(
-              "flex-1 p-4 md:p-6 min-w-0 transition-all duration-300",
-              isDrawerOpen ? "mr-[400px]" : "mr-0"
+              "flex-1 p-4 md:p-6 min-w-0 transition-all duration-300 overflow-y-auto",
+              isDrawerOpen ? "mr-[400px] lg:mr-[400px] md:mr-0" : "mr-0"
             )}
           >
             {children}
           </main>
           <div
             className={cn(
-              "fixed top-16 right-0 w-[400px] h-[calc(100vh-4rem)] bg-background z-10",
+              "fixed md:fixed top-16 right-0 bg-background z-10",
               "transition-transform duration-300 shadow-lg",
+              "md:w-[400px] md:h-[calc(100vh-4rem)]",
+              "w-full h-[calc(100vh-4rem)]",
               isDrawerOpen ? "translate-x-0" : "translate-x-full"
             )}
           >

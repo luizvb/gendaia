@@ -285,7 +285,7 @@ export function ChatDrawerContent() {
 
   return (
     <div className="h-full flex flex-col bg-background border-l">
-      <div className="border-b p-4">
+      <div className="shrink-0 border-b p-4">
         <h2 className="font-semibold flex items-center gap-2">
           <span className="relative">
             <Bot
@@ -360,8 +360,8 @@ export function ChatDrawerContent() {
           </div>
         )}
       </div>
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <ScrollArea className="flex-1 px-4" ref={scrollAreaRef}>
+      <div className="flex-1 overflow-hidden">
+        <ScrollArea className="h-full px-4" ref={scrollAreaRef}>
           <div className="flex flex-col gap-4 py-4">
             {messages.length === 0 && !isLoading ? (
               <div className="flex flex-col items-center justify-center h-full py-12 text-center">
@@ -451,103 +451,103 @@ export function ChatDrawerContent() {
             <div ref={messagesEndRef} />
           </div>
         </ScrollArea>
-        <div className="p-4 border-t">
-          {isRecording ? (
-            <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-950 rounded-lg border border-red-200 dark:border-red-800">
-              <div className="flex-1 flex items-center gap-3">
-                <div className="h-3 w-3 rounded-full bg-red-500 animate-pulse" />
-                <span className="text-sm font-medium">
-                  Gravando... {formatTime(recordingDuration)}
-                </span>
-              </div>
-              <Button
-                type="button"
-                variant="destructive"
-                size="sm"
-                onClick={stopRecording}
-              >
-                <MicOff className="h-4 w-4 mr-1" />
-                Parar
-              </Button>
+      </div>
+      <div className="shrink-0 p-4 border-t">
+        {isRecording ? (
+          <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-950 rounded-lg border border-red-200 dark:border-red-800">
+            <div className="flex-1 flex items-center gap-3">
+              <div className="h-3 w-3 rounded-full bg-red-500 animate-pulse" />
+              <span className="text-sm font-medium">
+                Gravando... {formatTime(recordingDuration)}
+              </span>
+            </div>
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              onClick={stopRecording}
+            >
+              <MicOff className="h-4 w-4 mr-1" />
+              Parar
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={cancelRecording}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
+        ) : audioBlob ? (
+          <div className="flex items-center gap-2 p-3 bg-secondary rounded-lg mb-2">
+            <div className="flex-1 flex items-center gap-3">
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                onClick={cancelRecording}
+                onClick={toggleAudioPreview}
+                className="h-8 w-8 p-0 rounded-full"
               >
-                <Trash2 className="h-4 w-4" />
+                {isPreviewingAudio ? (
+                  <Pause className="h-4 w-4" />
+                ) : (
+                  <Play className="h-4 w-4" />
+                )}
               </Button>
-            </div>
-          ) : audioBlob ? (
-            <div className="flex items-center gap-2 p-3 bg-secondary rounded-lg mb-2">
-              <div className="flex-1 flex items-center gap-3">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={toggleAudioPreview}
-                  className="h-8 w-8 p-0 rounded-full"
-                >
-                  {isPreviewingAudio ? (
-                    <Pause className="h-4 w-4" />
-                  ) : (
-                    <Play className="h-4 w-4" />
-                  )}
-                </Button>
-                <div className="h-10 flex-1 bg-primary/10 rounded-full relative">
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <span className="text-xs font-medium">
-                      Mensagem de áudio pronta
-                    </span>
-                  </div>
+              <div className="h-10 flex-1 bg-primary/10 rounded-full relative">
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className="text-xs font-medium">
+                    Mensagem de áudio pronta
+                  </span>
                 </div>
               </div>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={cancelRecording}
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
             </div>
-          ) : null}
-
-          <form onSubmit={handleSubmit} className="flex gap-2">
-            <Input
-              placeholder="Digite sua mensagem..."
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              disabled={isLoading || isRecording || isTranscribing}
-              className={cn(audioBlob ? "opacity-50" : "")}
-            />
-            {!audioBlob && (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={toggleRecording}
-                disabled={isLoading || isTranscribing}
-              >
-                <Mic className="h-4 w-4" />
-              </Button>
-            )}
             <Button
-              type="submit"
-              disabled={
-                isLoading ||
-                isRecording ||
-                isTranscribing ||
-                (!input.trim() && !audioBlob)
-              }
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={cancelRecording}
             >
-              {isLoading || isTranscribing ? (
-                "Processando..."
-              ) : (
-                <Send className="h-4 w-4" />
-              )}
+              <Trash2 className="h-4 w-4" />
             </Button>
-          </form>
-        </div>
+          </div>
+        ) : null}
+
+        <form onSubmit={handleSubmit} className="flex gap-2">
+          <Input
+            placeholder="Digite sua mensagem..."
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            disabled={isLoading || isRecording || isTranscribing}
+            className={cn(audioBlob ? "opacity-50" : "")}
+          />
+          {!audioBlob && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={toggleRecording}
+              disabled={isLoading || isTranscribing}
+            >
+              <Mic className="h-4 w-4" />
+            </Button>
+          )}
+          <Button
+            type="submit"
+            disabled={
+              isLoading ||
+              isRecording ||
+              isTranscribing ||
+              (!input.trim() && !audioBlob)
+            }
+          >
+            {isLoading || isTranscribing ? (
+              "Processando..."
+            ) : (
+              <Send className="h-4 w-4" />
+            )}
+          </Button>
+        </form>
       </div>
       <audio ref={audioRef} className="hidden" />
       <audio
