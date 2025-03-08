@@ -22,6 +22,19 @@ import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkIsMobile = () => setIsMobile(window.innerWidth < 768);
+    checkIsMobile();
+    window.addEventListener("resize", checkIsMobile);
+    return () => window.removeEventListener("resize", checkIsMobile);
+  }, []);
+
+  return isMobile;
+}
+
 export default function DashboardLayout({
   children,
 }: {
@@ -30,12 +43,17 @@ export default function DashboardLayout({
   const router = useRouter();
   const pathname = usePathname();
   const supabase = createClient();
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const isMobile = useIsMobile();
+  const [isDrawerOpen, setIsDrawerOpen] = useState(!isMobile);
   const [profile, setProfile] = useState<{
     full_name: string;
     avatar_url: string | null;
     role: string;
   } | null>(null);
+
+  useEffect(() => {
+    if (isMobile) setIsDrawerOpen(false);
+  }, [isMobile]);
 
   useEffect(() => {
     async function loadProfile() {
