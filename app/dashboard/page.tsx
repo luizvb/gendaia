@@ -130,7 +130,7 @@ export default function DashboardPage() {
 
   if (isLoading || !dashboardData) {
     return (
-      <div className="container mx-auto p-4">
+      <div className="container ">
         <h1 className="text-2xl font-bold mb-6">Dashboard</h1>
         <div className="flex items-center mb-4 space-x-2">
           <Skeleton className="h-10 w-32" />
