@@ -44,16 +44,18 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   // Allow access to auth-related and public routes
-  const publicRoutes = ["/login", "/register", "/auth"];
+  const publicRoutes = ["/login", "/register", "/auth", "/booking"];
   const isPublicRoute = publicRoutes.some((route) =>
     request.nextUrl.pathname.startsWith(route)
   );
+
+  const isRootRoute = request.nextUrl.pathname === "/";
 
   // Allow access to onboarding only for authenticated users
   const isOnboardingRoute = request.nextUrl.pathname.startsWith("/onboarding");
 
   if (!user) {
-    if (!isPublicRoute) {
+    if (!isPublicRoute && !isRootRoute) {
       const url = request.nextUrl.clone();
       url.pathname = "/login";
       return NextResponse.redirect(url);
