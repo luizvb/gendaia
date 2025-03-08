@@ -15,8 +15,8 @@ import { Button } from "@/components/ui/button";
 
 export default function Home() {
   return (
-    <div className="flex min-h-screen flex-col">
-      <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b bg-background/80 px-4 backdrop-blur md:px-6">
+    <div className="flex min-h-screen flex-col overflow-x-hidden">
+      <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b bg-background/80 px-4 backdrop-blur md:px-6 max-w-full overflow-x-hidden">
         <div className="flex items-center gap-4">
           <Link href="/" className="flex items-center gap-2">
             <span className="text-xl font-semibold tracking-tight">
@@ -260,7 +260,7 @@ export default function Home() {
                     </div>
                   </li>
                 </ul>
-                <div className="flex flex-col gap-2 min-[400px]:flex-row pt-4">
+                <div className="flex flex-col gap-2 min-[400px]:flex-row pt-4 flex-wrap">
                   <Link href="/register">
                     <Button size="lg" className="gap-1">
                       Ativar Agente IA
@@ -647,11 +647,7 @@ export default function Home() {
                     <ArrowRight className="h-4 w-4" />
                   </Button>
                 </Link>
-                <Link href="/booking">
-                  <Button size="lg" variant="outline">
-                    Agendar Horário
-                  </Button>
-                </Link>
+
                 <Link href="/login">
                   <Button size="lg" variant="outline">
                     Já tem uma conta? Entrar
