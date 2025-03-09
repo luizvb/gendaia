@@ -11,10 +11,9 @@ import { Suspense } from "react";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "GENDAIA - AI que agenda!",
+  title: "Gendaia - AI que agenda!",
   description:
-    "Plataforma elegante e minimalista para gerenciar agendamentos de serviços de GENDAIA",
-  generator: "v0.dev",
+    "Plataforma elegante e minimalista para gerenciar agendamentos de serviços com Inteligência Artificial",
 };
 
 export default function RootLayout({

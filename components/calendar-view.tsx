@@ -433,11 +433,7 @@ export function CalendarView() {
           {/* Grade principal do calendário */}
           <div className="flex-grow">
             {isLoading ? (
-              <div className="flex h-full items-center justify-center min-h-[160px]">
-                <div className="text-sm text-muted-foreground">
-                  Carregando agendamentos...
-                </div>
-              </div>
+              <div className="flex h-full items-center justify-center min-h-[160px]"></div>
             ) : (
               <>
                 <div
