@@ -339,37 +339,6 @@ export function CalendarView() {
     }
   };
 
-  // Adicionar estado para controlar a posição da linha de horário atual
-  const [currentTimePosition, setCurrentTimePosition] = useState(0);
-
-  // Atualizar a posição da linha de horário atual a cada minuto
-  useEffect(() => {
-    const updateCurrentTimeLine = () => {
-      const now = new Date();
-      const hours = now.getHours();
-      const minutes = now.getMinutes();
-
-      // Só mostrar a linha se estiver dentro do horário de funcionamento (9h-19h)
-      if (hours >= 9 && hours < 19) {
-        // Calcular a posição baseada no horário atual
-        // 12px é a altura de cada slot de 30 minutos
-        const startHour = 9; // Hora de início do calendário
-        const hoursFromStart = hours - startHour;
-        const minutesPercentage = minutes / 60;
-
-        // Posição = (horas desde o início + percentual dos minutos) * altura de 2 slots (1 hora)
-        const position = (hoursFromStart + minutesPercentage) * 24;
-        setCurrentTimePosition(position);
-      }
-    };
-
-    // Atualizar imediatamente e depois a cada minuto
-    updateCurrentTimeLine();
-    const interval = setInterval(updateCurrentTimeLine, 60000);
-
-    return () => clearInterval(interval);
-  }, []);
-
   return (
     <div className="flex flex-col space-y-4">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -515,19 +484,6 @@ export function CalendarView() {
                 <div
                   className={`flex w-full ${view === "day" ? "" : "divide-x"}`}
                 >
-                  {/* Linha de horário atual */}
-                  {isSameDay(new Date(), currentDate) && (
-                    <div
-                      className="absolute left-0 right-0 z-30 border-t border-red-500"
-                      style={{
-                        top: `${currentTimePosition}px`,
-                        transform: "translateY(48px)", // Ajuste para compensar o cabeçalho
-                      }}
-                    >
-                      <div className="absolute -left-1 -top-1.5 h-3 w-3 rounded-full bg-red-500" />
-                    </div>
-                  )}
-
                   {visibleDays.map((day, dayIndex) => (
                     <div key={dayIndex} className="flex-1 min-w-0">
                       {dayHours.map((hour, hourIndex) => {
