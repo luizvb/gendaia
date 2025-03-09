@@ -2,7 +2,17 @@
 
 import type React from "react";
 import Link from "next/link";
-import { Bell, ChevronDown, LogOut, Bot, Menu } from "lucide-react";
+import {
+  Bell,
+  ChevronDown,
+  LogOut,
+  Bot,
+  Menu,
+  User,
+  Maximize,
+  Minimize,
+  Download,
+} from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,6 +31,7 @@ import { ChatDrawerContent } from "@/components/chat-drawer-content";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
+import { IOSPWAPrompt } from "@/components/ios-pwa-prompt";
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(false);
@@ -33,6 +44,59 @@ function useIsMobile() {
   }, []);
 
   return isMobile;
+}
+
+// Hook para controlar o fullscreen
+function useFullscreen() {
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement
+        .requestFullscreen()
+        .then(() => {
+          setIsFullscreen(true);
+        })
+        .catch((err) => {
+          console.error(`Erro ao entrar em fullscreen: ${err.message}`);
+        });
+    } else {
+      if (document.exitFullscreen) {
+        document
+          .exitFullscreen()
+          .then(() => {
+            setIsFullscreen(false);
+          })
+          .catch((err) => {
+            console.error(`Erro ao sair do fullscreen: ${err.message}`);
+          });
+      }
+    }
+  };
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+    };
+  }, []);
+
+  return { isFullscreen, toggleFullscreen };
+}
+
+// Hook para controlar o prompt de instalação do PWA
+function usePWAInstall() {
+  const [showPrompt, setShowPrompt] = useState(false);
+
+  const togglePrompt = () => {
+    setShowPrompt(!showPrompt);
+  };
+
+  return { showPrompt, setShowPrompt, togglePrompt };
 }
 
 export default function DashboardLayout({
@@ -50,6 +114,9 @@ export default function DashboardLayout({
     avatar_url: string | null;
     role: string;
   } | null>(null);
+
+  const { isFullscreen, toggleFullscreen } = useFullscreen();
+  const { showPrompt, setShowPrompt, togglePrompt } = usePWAInstall();
 
   useEffect(() => {
     if (isMobile) setIsDrawerOpen(false);
@@ -193,6 +260,37 @@ export default function DashboardLayout({
                   }
                 `}</style>
               </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={toggleFullscreen}
+                title={
+                  isFullscreen
+                    ? "Sair do modo tela cheia"
+                    : "Entrar em tela cheia"
+                }
+              >
+                {isFullscreen ? (
+                  <Minimize className="h-5 w-5" />
+                ) : (
+                  <Maximize className="h-5 w-5" />
+                )}
+                <span className="sr-only">
+                  {isFullscreen
+                    ? "Sair do modo tela cheia"
+                    : "Entrar em tela cheia"}
+                </span>
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={togglePrompt}
+                title="Instalar na tela inicial"
+                className="md:flex hidden"
+              >
+                <Download className="h-5 w-5" />
+                <span className="sr-only">Instalar na tela inicial</span>
+              </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" className="gap-2 pl-2 pr-4">
@@ -286,6 +384,10 @@ export default function DashboardLayout({
           </div>
         </div>
       </div>
+      <IOSPWAPrompt
+        forceShow={showPrompt}
+        onClose={() => setShowPrompt(false)}
+      />
     </div>
   );
 }
