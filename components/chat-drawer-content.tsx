@@ -284,7 +284,7 @@ export function ChatDrawerContent() {
   };
 
   return (
-    <div className="h-full flex flex-col bg-background border-l">
+    <div className="h-full flex flex-col bg-background border-l overflow-hidden shadow-xl">
       <div className="shrink-0 border-b p-4">
         <h2 className="font-semibold flex items-center gap-2">
           <span className="relative">
@@ -452,7 +452,7 @@ export function ChatDrawerContent() {
           </div>
         </ScrollArea>
       </div>
-      <div className="shrink-0 p-4 border-t">
+      <div className="shrink-0 p-4 border-t mt-auto">
         {isRecording ? (
           <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-950 rounded-lg border border-red-200 dark:border-red-800">
             <div className="flex-1 flex items-center gap-3">

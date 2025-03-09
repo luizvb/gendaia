@@ -274,10 +274,11 @@ export default function DashboardLayout({
           </main>
           <div
             className={cn(
-              "fixed md:fixed top-16 right-0 bg-background z-10",
+              "fixed md:fixed top-16 right-0 bg-background z-30",
               "transition-transform duration-300 shadow-lg",
               "md:w-[400px] md:h-[calc(100vh-4rem)]",
               "w-full h-[calc(100vh-4rem)]",
+              "flex flex-col",
               isDrawerOpen ? "translate-x-0" : "translate-x-full"
             )}
           >

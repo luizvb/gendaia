@@ -466,7 +466,7 @@ export function CalendarView() {
       {/* Calendário com layout fixo e scroll único */}
       <div
         ref={calendarContainerRef}
-        className="relative rounded-md border overflow-auto max-w-full"
+        className="relative rounded-md border overflow-auto max-w-full z-10"
       >
         {/* Cabeçalho com os dias - fixo no topo */}
         <div className="sticky top-0 z-20 flex bg-background border-b">
