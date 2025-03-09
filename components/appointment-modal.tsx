@@ -187,6 +187,45 @@ export function AppointmentModal({
     }
   }, [services, serviceId, isEditMode]);
 
+  // Verificar disponibilidade quando mudar o profissional
+  useEffect(() => {
+    if (professionalId && date && serviceId) {
+      checkAvailability();
+    }
+  }, [professionalId]);
+
+  const checkAvailability = async () => {
+    if (!date || !professionalId || !serviceId) return;
+
+    try {
+      const selectedService = services.find((s) => s.id === serviceId);
+      if (!selectedService) return;
+
+      const formattedDate = format(date, "yyyy-MM-dd");
+      const response = await fetch(
+        `/api/availability?professional_id=${professionalId}&date=${formattedDate}&service_duration=${selectedService.duration}`
+      );
+
+      if (!response.ok) {
+        throw new Error("Falha ao verificar disponibilidade");
+      }
+
+      const data = await response.json();
+      const timeStr = time || format(selectedSlot?.date || new Date(), "HH:mm");
+
+      // Se o horário atual não estiver disponível, limpar a seleção
+      if (!data.available_slots.includes(timeStr)) {
+        setTime("");
+        toast.error(
+          "O horário selecionado não está mais disponível com este profissional"
+        );
+      }
+    } catch (error) {
+      console.error("Erro ao verificar disponibilidade:", error);
+      toast.error("Não foi possível verificar a disponibilidade do horário");
+    }
+  };
+
   const handleClientSelect = (client: Client) => {
     setClientName(client.name);
     setClientPhone(client.phone || "");
@@ -268,15 +307,15 @@ export function AppointmentModal({
         return;
       }
 
-      const [hours, minutes] = time.split(":");
-      const startTime = new Date(date);
-      startTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
-
       const selectedService = services.find((s) => s.id === serviceId);
       if (!selectedService) {
         toast.error("Serviço inválido");
         return;
       }
+
+      const [hours, minutes] = time.split(":");
+      const startTime = new Date(date);
+      startTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
 
       const endTime = new Date(startTime);
       endTime.setMinutes(endTime.getMinutes() + selectedService.duration);
@@ -286,6 +325,25 @@ export function AppointmentModal({
       );
       if (!selectedProfessional) {
         toast.error("Profissional inválido");
+        return;
+      }
+
+      // Verificar disponibilidade antes de criar/atualizar
+      const formattedDate = format(startTime, "yyyy-MM-dd");
+      const availabilityResponse = await fetch(
+        `/api/availability?professional_id=${professionalId}&date=${formattedDate}&service_duration=${selectedService.duration}`
+      );
+
+      if (!availabilityResponse.ok) {
+        throw new Error("Falha ao verificar disponibilidade");
+      }
+
+      const availabilityData = await availabilityResponse.json();
+      const timeStr = format(startTime, "HH:mm");
+
+      // Se for edição, permitir o mesmo horário
+      if (!isEditMode && !availabilityData.available_slots.includes(timeStr)) {
+        toast.error("Este horário não está mais disponível");
         return;
       }
 
@@ -418,16 +476,51 @@ export function AppointmentModal({
     }
   };
 
-  // Gerar horários disponíveis
-  const timeSlots = useMemo(() => {
-    const slots = [];
-    for (let hour = 9; hour < 19; hour++) {
-      for (let minute = 0; minute < 60; minute += 30) {
-        slots.push(format(new Date().setHours(hour, minute), "HH:mm"));
-      }
+  const [timeSlots, setTimeSlots] = useState<string[]>([]);
+  const [isLoadingTimeSlots, setIsLoadingTimeSlots] = useState(false);
+
+  // Buscar horários disponíveis quando mudar profissional, serviço ou data
+  useEffect(() => {
+    if (professionalId && date && serviceId) {
+      fetchAvailableTimeSlots();
+    } else {
+      setTimeSlots([]);
     }
-    return slots;
-  }, []);
+  }, [professionalId, date, serviceId]);
+
+  const fetchAvailableTimeSlots = async () => {
+    if (!date || !professionalId || !serviceId) return;
+
+    try {
+      setIsLoadingTimeSlots(true);
+      const selectedService = services.find((s) => s.id === serviceId);
+      if (!selectedService) return;
+
+      const formattedDate = format(date, "yyyy-MM-dd");
+      const response = await fetch(
+        `/api/availability?professional_id=${professionalId}&date=${formattedDate}&service_duration=${selectedService.duration}`
+      );
+
+      if (!response.ok) {
+        throw new Error("Falha ao buscar horários disponíveis");
+      }
+
+      const data = await response.json();
+      setTimeSlots(data.available_slots);
+
+      // Se estiver em modo de edição, manter o horário atual se ainda estiver disponível
+      if (isEditMode && time && !data.available_slots.includes(time)) {
+        setTime("");
+        toast.error("O horário selecionado não está mais disponível");
+      }
+    } catch (error) {
+      console.error("Erro ao buscar horários disponíveis:", error);
+      toast.error("Não foi possível carregar os horários disponíveis");
+      setTimeSlots([]);
+    } finally {
+      setIsLoadingTimeSlots(false);
+    }
+  };
 
   // Filtrar clientes com base no termo de busca local
   const filteredClients = useMemo(() => {
@@ -454,6 +547,28 @@ export function AppointmentModal({
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
+          <div className="grid gap-2">
+            <Label htmlFor="professional">Profissional</Label>
+            <Select
+              value={professionalId}
+              onValueChange={(value) => {
+                setProfessionalId(value);
+                setTime(""); // Limpar horário ao mudar de profissional
+              }}
+            >
+              <SelectTrigger id="professional">
+                <SelectValue placeholder="Selecione um profissional" />
+              </SelectTrigger>
+              <SelectContent>
+                {professionals.map((professional) => (
+                  <SelectItem key={professional.id} value={professional.id}>
+                    {professional.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div className="grid gap-2">
               <Label htmlFor="date">Data</Label>
@@ -483,55 +598,42 @@ export function AppointmentModal({
             </div>
             <div className="grid gap-2">
               <Label htmlFor="time">Horário</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    id="time"
-                    variant="outline"
-                    className="justify-start text-left font-normal"
-                  >
-                    <Clock className="mr-2 h-4 w-4" />
-                    {time}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-48 p-0">
-                  <div className="grid max-h-[300px] overflow-y-auto p-1">
-                    {timeSlots.map((slot) => (
-                      <Button
-                        key={slot}
-                        variant={time === slot ? "default" : "ghost"}
-                        className="justify-start font-normal"
-                        onClick={() => setTime(slot)}
-                      >
-                        {slot}
-                      </Button>
-                    ))}
-                  </div>
-                </PopoverContent>
-              </Popover>
+              <Select
+                value={time}
+                onValueChange={setTime}
+                disabled={!timeSlots.length || isLoadingTimeSlots}
+              >
+                <SelectTrigger id="time">
+                  <SelectValue
+                    placeholder={
+                      isLoadingTimeSlots
+                        ? "Carregando horários..."
+                        : timeSlots.length
+                        ? "Selecione um horário"
+                        : "Selecione profissional, serviço e data"
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {timeSlots.map((slot) => (
+                    <SelectItem key={slot} value={slot}>
+                      {slot}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
-          <div className="grid gap-2">
-            <Label htmlFor="professional">Profissional</Label>
-            <Select value={professionalId} onValueChange={setProfessionalId}>
-              <SelectTrigger id="professional">
-                <SelectValue placeholder="Selecione um profissional" />
-              </SelectTrigger>
-              <SelectContent>
-                {professionals.map((professional) => (
-                  <SelectItem
-                    key={professional.id}
-                    value={String(professional.id)}
-                  >
-                    {professional.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+
           <div className="grid gap-2">
             <Label htmlFor="service">Serviço</Label>
-            <Select value={serviceId} onValueChange={setServiceId}>
+            <Select
+              value={serviceId}
+              onValueChange={(value) => {
+                setServiceId(value);
+                setTime(""); // Limpar horário ao mudar de serviço
+              }}
+            >
               <SelectTrigger>
                 <SelectValue placeholder="Selecione um serviço" />
               </SelectTrigger>
