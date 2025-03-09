@@ -68,7 +68,10 @@ export function ApiLoadingProvider({ children }: { children: ReactNode }) {
         pathname.includes("/audio") ||
         pathname.includes("/transcribe");
 
-      if (!isChatRequest) {
+      // Skip loading for root path
+      const isRootPath = pathname === "/" || pathname === "";
+
+      if (!isChatRequest && !isRootPath) {
         startLoading();
       }
 
@@ -76,7 +79,7 @@ export function ApiLoadingProvider({ children }: { children: ReactNode }) {
         const response = await originalFetch(...args);
         return response;
       } finally {
-        if (!isChatRequest) {
+        if (!isChatRequest && !isRootPath) {
           stopLoading();
         }
       }

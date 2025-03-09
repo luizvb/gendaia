@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { usePathname } from "next/navigation";
 
 interface SplashScreenProps {
   minimumDisplayTime?: number;
@@ -18,6 +19,10 @@ export function SplashScreen({
   subtitle,
 }: SplashScreenProps) {
   const [show, setShow] = useState(true);
+  const pathname = usePathname();
+
+  // Skip splash screen for root path
+  if (pathname === "/") return null;
 
   useEffect(() => {
     const startTime = Date.now();
