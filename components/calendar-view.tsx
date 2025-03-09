@@ -163,18 +163,24 @@ export function CalendarView() {
     [view, weekDays, currentDate]
   );
 
-  // Gerar os horários do dia
-  const dayHours = Array.from({ length: 10 }).map((_, i) =>
-    addHours(
-      new Date(
-        currentDate.getFullYear(),
-        currentDate.getMonth(),
-        currentDate.getDate(),
-        9
-      ),
-      i
-    )
-  );
+  // Gerar os horários do dia (agora em intervalos de 30 minutos)
+  const dayHours = useMemo(() => {
+    const slots = [];
+    for (let hour = 9; hour < 19; hour++) {
+      for (let minutes = 0; minutes < 60; minutes += 30) {
+        slots.push(
+          new Date(
+            currentDate.getFullYear(),
+            currentDate.getMonth(),
+            currentDate.getDate(),
+            hour,
+            minutes
+          )
+        );
+      }
+    }
+    return slots;
+  }, [currentDate]);
 
   // Determinar quantos dias mostrar com base na largura da tela (para mobile)
   const [visibleDays, setVisibleDays] = useState(daysToShow);
@@ -387,16 +393,16 @@ export function CalendarView() {
         style={{ height: "calc(100vh - 220px)" }}
       >
         {/* Cabeçalho com os dias - fixo no topo */}
-        <div className="sticky top-0 z-10 flex bg-background">
+        <div className="sticky top-0 z-20 flex bg-background border-b">
           {/* Célula vazia no canto superior esquerdo */}
-          <div className="flex-shrink-0 w-14 sm:w-20 h-12 border-b border-r"></div>
+          <div className="flex-shrink-0 w-14 sm:w-20 h-12 border-r bg-background"></div>
 
           {/* Cabeçalhos dos dias */}
           <div className={`flex flex-grow ${view === "day" ? "" : "divide-x"}`}>
             {visibleDays.map((day, i) => (
               <div
                 key={i}
-                className={`flex-1 flex h-12 flex-col items-center justify-center border-b
+                className={`flex-1 flex h-12 flex-col items-center justify-center
                   ${isSameDay(day, new Date()) ? "bg-accent" : ""}`}
               >
                 <span className="text-xs font-medium text-muted-foreground">
@@ -411,16 +417,13 @@ export function CalendarView() {
         </div>
 
         {/* Conteúdo do calendário com grid */}
-        <div className="flex">
+        <div className="flex relative">
           {/* Coluna de horários - fixa à esquerda */}
           <div className="sticky left-0 flex-shrink-0 w-14 sm:w-20 bg-background z-10">
-            {/* Cabeçalho vazio acima dos horários */}
-            <div className="h-8 border-b border-r hidden sm:block"></div>
-
             {dayHours.map((hour, i) => (
               <div
                 key={i}
-                className="flex h-16 items-center justify-center border-b border-r text-xs sm:text-sm text-muted-foreground"
+                className="flex h-12 items-center justify-center border-b border-r text-xs sm:text-sm text-muted-foreground"
               >
                 {format(hour, "HH:mm")}
               </div>
@@ -447,7 +450,8 @@ export function CalendarView() {
                           day.getFullYear(),
                           day.getMonth(),
                           day.getDate(),
-                          hour.getHours()
+                          hour.getHours(),
+                          hour.getMinutes()
                         );
 
                         // Get all appointments for this time slot
@@ -456,16 +460,15 @@ export function CalendarView() {
                             const appDate = new Date(app.start_time);
                             return (
                               isSameDay(appDate, currentHour) &&
-                              appDate.getHours() === currentHour.getHours()
+                              appDate.getHours() === currentHour.getHours() &&
+                              appDate.getMinutes() === currentHour.getMinutes()
                             );
                           });
 
                         return (
                           <div
                             key={hourIndex}
-                            className={`group relative h-16 border-t border-dashed border-border first:border-t-0 ${
-                              hourIndex === 0 ? "border-t-0" : ""
-                            }`}
+                            className="group relative h-12 border-b border-dashed border-border"
                             onClick={() =>
                               openAppointmentModal(
                                 currentHour,
@@ -478,12 +481,36 @@ export function CalendarView() {
                                 const professional = getProfessional(
                                   appointment.professional_id
                                 );
+                                const startTime = new Date(
+                                  appointment.start_time
+                                );
+                                const endTime = new Date(appointment.end_time);
+                                const durationInMinutes =
+                                  (endTime.getTime() - startTime.getTime()) /
+                                  (1000 * 60);
+                                const heightInSlots =
+                                  (durationInMinutes / 30) * 48; // 48px is the height of one slot
+
+                                // Skip rendering if this isn't the start time slot
+                                if (
+                                  startTime.getHours() !==
+                                    currentHour.getHours() ||
+                                  startTime.getMinutes() !==
+                                    currentHour.getMinutes()
+                                ) {
+                                  return null;
+                                }
+
                                 return (
                                   <div
                                     key={appointment.id}
-                                    className="flex-1 flex flex-col rounded-md p-1 text-xs text-white cursor-pointer hover:brightness-90 transition-all"
+                                    className="absolute left-0 right-0 flex flex-col rounded-md p-1 text-xs text-white cursor-pointer hover:brightness-90 transition-all overflow-hidden"
                                     style={{
                                       backgroundColor: professional?.color,
+                                      height: `${heightInSlots}px`,
+                                      zIndex: 10,
+                                      top: 0,
+                                      minHeight: "24px", // Altura mínima para garantir que pelo menos uma linha seja visível
                                     }}
                                     onClick={(e) => {
                                       e.stopPropagation();
@@ -494,17 +521,34 @@ export function CalendarView() {
                                       );
                                     }}
                                   >
-                                    <div className="flex items-center gap-1">
-                                      <span className="font-medium truncate">
-                                        {appointment.clients.name}
-                                      </span>
-                                      <span className="text-[10px] opacity-75">
-                                        ({professional?.name})
-                                      </span>
+                                    <div className="flex flex-col gap-0.5 min-h-0 h-full">
+                                      <div className="flex items-center gap-1 min-w-0">
+                                        <span className="font-medium truncate">
+                                          {appointment.clients.name}
+                                        </span>
+                                        <span className="text-[10px] opacity-75 whitespace-nowrap flex-shrink-0">
+                                          ({professional?.name})
+                                        </span>
+                                      </div>
+                                      {heightInSlots >= 32 && (
+                                        <>
+                                          <span className="truncate opacity-75">
+                                            {appointment.services.name}
+                                          </span>
+                                          <span className="text-[10px] opacity-75 whitespace-nowrap">
+                                            {format(startTime, "HH:mm")} -{" "}
+                                            {format(endTime, "HH:mm")}
+                                          </span>
+                                        </>
+                                      )}
+                                      {heightInSlots < 32 &&
+                                        heightInSlots >= 24 && (
+                                          <span className="text-[10px] opacity-75 whitespace-nowrap">
+                                            {format(startTime, "HH:mm")} -{" "}
+                                            {format(endTime, "HH:mm")}
+                                          </span>
+                                        )}
                                     </div>
-                                    <span className="truncate opacity-75">
-                                      {appointment.services.name}
-                                    </span>
                                   </div>
                                 );
                               })}
