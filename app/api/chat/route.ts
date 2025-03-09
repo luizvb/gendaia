@@ -2,7 +2,7 @@ import {
   BedrockRuntimeClient,
   ConverseCommand,
 } from "@aws-sdk/client-bedrock-runtime";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getBusinessId } from "@/app/lib/business-id";
 import { handleToolCalls, ToolUse, ToolResult } from "../../lib/tool-handlers";
@@ -81,7 +81,7 @@ GUIA DE FERRAMENTAS COM EXEMPLOS:
    - Resposta: "Eduardo tem os seguintes horários disponíveis amanhã: 09:00, 10:00..."
 
 4. validateAppointment
-   Descrição: Valida todos os dados de um agendamento de uma vez
+   Descrição: Valida todos os dados de um agendamento: serviço, profissional, disponibilidade e cliente
    Quando usar: Quando o usuário fornecer várias informações de agendamento de uma vez
    Exemplo de uso:
    - Usuário: "Quero agendar um "servico" com o Eduardo amanhã às 14h"
@@ -89,9 +89,10 @@ GUIA DE FERRAMENTAS COM EXEMPLOS:
      new Date(new Date().setDate(new Date().getDate() + 1))
        .toISOString()
        .split("T")[0]
-   }", time="14:00"
+   }", time="14:00", clientName="João Silva", clientPhone="11999998888"
    - Resposta: Se válido: "Perfeito! Posso confirmar seu "servico" com Eduardo amanhã às 14h."
                Se inválido: "Infelizmente Eduardo não está disponível nesse horário. Ele tem disponibilidade às 15h ou 16h."
+               Se múltiplos clientes: "Encontramos mais de um cliente com o nome João Silva. Temos João Silva (11988887777) ou João Silva (11999996666). Qual deles você deseja agendar?"
 
 5. createAppointment
    Descrição: Cria um novo agendamento
@@ -109,12 +110,14 @@ Quando o usuário fornecer várias informações de uma vez (ex: "Quero agendar 
 - Se o serviço existe
 - Se o profissional existe
 - Se o horário está disponível
+- Se o cliente já existe no sistema (quando nome ou telefone são fornecidos)
 
 Se a data não for fornecida, o sistema usará a data de hoje automaticamente.
 Se apenas dia e mês forem fornecidos (ex: 12/03), sempre use o ano atual (${new Date().getFullYear()}).
 
 Se validateAppointment retornar que tudo é válido, confirme os detalhes com o cliente e use createAppointment.
 Se algo não for válido, use as sugestões retornadas para ajudar o cliente a encontrar alternativas.
+Se forem encontrados múltiplos clientes com o mesmo nome, peça ao cliente para confirmar qual é o correto.
 `;
 
 export async function POST(req: Request) {
@@ -125,7 +128,10 @@ export async function POST(req: Request) {
     let businessId: string;
 
     try {
-      businessId = (await getBusinessId(supabase))!;
+      const nextReq = new NextRequest(req.url, {
+        headers: req.headers,
+      });
+      businessId = (await getBusinessId(nextReq))!;
     } catch (error) {
       console.error("Authentication error:", error);
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -199,7 +205,7 @@ export async function POST(req: Request) {
             toolSpec: {
               name: "validateAppointment",
               description:
-                "Valida todos os dados de um agendamento: serviço, profissional e disponibilidade",
+                "Valida todos os dados de um agendamento: serviço, profissional, disponibilidade e cliente",
               inputSchema: {
                 json: {
                   type: "object",
@@ -219,6 +225,14 @@ export async function POST(req: Request) {
                     time: {
                       type: "string",
                       description: "Horário no formato HH:MM",
+                    },
+                    clientName: {
+                      type: "string",
+                      description: "Nome do cliente",
+                    },
+                    clientPhone: {
+                      type: "string",
+                      description: "Telefone do cliente",
                     },
                   },
                   required: ["serviceName", "time"],
@@ -280,8 +294,8 @@ export async function POST(req: Request) {
       },
       inferenceConfig: {
         maxTokens: 1024,
-        temperature: 0.1,
-        topP: 0.3,
+        temperature: 0,
+        topP: 0.2,
       },
     });
 

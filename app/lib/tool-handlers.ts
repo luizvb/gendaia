@@ -223,6 +223,8 @@ export async function handleValidateAppointment(
     professionalName?: string;
     date?: string;
     time: string;
+    clientName?: string;
+    clientPhone?: string;
   }
 ) {
   // Use today's date if not provided
@@ -240,6 +242,13 @@ export async function handleValidateAppointment(
       suggestions: [] as any[],
     },
     availability: { valid: false, availableSlots: [] as string[] },
+    client: {
+      valid: false,
+      data: null as any,
+      suggestions: [] as any[],
+      multipleMatches: false,
+      message: "",
+    },
   };
 
   let serviceDuration = 30;
@@ -347,6 +356,107 @@ export async function handleValidateAppointment(
     }
   }
 
+  // 4. Check client if name or phone is provided
+  if (input.clientName || input.clientPhone) {
+    // If both name and phone are provided, we can do a more precise check
+    if (input.clientName && input.clientPhone) {
+      // First check by phone as it's more precise
+      const { data: clientByPhone } = await supabase
+        .from("clients")
+        .select("id, name, phone")
+        .eq("phone", input.clientPhone)
+        .eq("business_id", businessId)
+        .single();
+
+      if (clientByPhone) {
+        validationResults.client.valid = true;
+        validationResults.client.data = clientByPhone;
+
+        // Check if the name matches
+        if (
+          clientByPhone.name.toLowerCase() !== input.clientName.toLowerCase()
+        ) {
+          validationResults.client.message = `Cliente encontrado com o telefone ${input.clientPhone}, mas com nome diferente: ${clientByPhone.name}`;
+        } else {
+          validationResults.client.message = `Cliente encontrado: ${clientByPhone.name} (${clientByPhone.phone})`;
+        }
+      } else {
+        // If not found by phone, check by name
+        const clientsByName = await findClientsByName(
+          supabase,
+          input.clientName,
+          businessId
+        );
+
+        if (clientsByName && clientsByName.length > 0) {
+          // If we have multiple matches by name
+          if (clientsByName.length > 1) {
+            validationResults.client.multipleMatches = true;
+            validationResults.client.suggestions = clientsByName;
+
+            // Formatar a lista de clientes com seus telefones
+            const clientOptions = clientsByName
+              .map((c) => `${c.name} (${c.phone})`)
+              .join(" ou ");
+
+            validationResults.client.message = `Encontramos ${clientsByName.length} clientes com nome similar a "${input.clientName}". Temos ${clientOptions}. Qual deles você deseja agendar?`;
+          } else {
+            // Single match by name
+            validationResults.client.valid = true;
+            validationResults.client.data = clientsByName[0];
+            validationResults.client.message = `Cliente encontrado: ${clientsByName[0].name} (${clientsByName[0].phone}), mas com telefone diferente do informado.`;
+          }
+        } else {
+          // No client found
+          validationResults.client.message = `Nenhum cliente encontrado com o nome "${input.clientName}" e telefone "${input.clientPhone}". Um novo cliente será criado durante o agendamento.`;
+        }
+      }
+    } else if (input.clientName) {
+      // Only name provided
+      const clientsByName = await findClientsByName(
+        supabase,
+        input.clientName,
+        businessId
+      );
+
+      if (clientsByName && clientsByName.length > 0) {
+        if (clientsByName.length > 1) {
+          validationResults.client.multipleMatches = true;
+          validationResults.client.suggestions = clientsByName;
+
+          // Formatar a lista de clientes com seus telefones
+          const clientOptions = clientsByName
+            .map((c) => `${c.name} (${c.phone})`)
+            .join(" ou ");
+
+          validationResults.client.message = `Encontramos ${clientsByName.length} clientes com nome similar a "${input.clientName}". Temos ${clientOptions}. Qual deles você deseja agendar?`;
+        } else {
+          validationResults.client.valid = true;
+          validationResults.client.data = clientsByName[0];
+          validationResults.client.message = `Cliente encontrado: ${clientsByName[0].name} (${clientsByName[0].phone})`;
+        }
+      } else {
+        validationResults.client.message = `Nenhum cliente encontrado com o nome "${input.clientName}". Um novo cliente será criado durante o agendamento.`;
+      }
+    } else if (input.clientPhone) {
+      // Only phone provided
+      const { data: clientByPhone } = await supabase
+        .from("clients")
+        .select("id, name, phone")
+        .eq("phone", input.clientPhone)
+        .eq("business_id", businessId)
+        .single();
+
+      if (clientByPhone) {
+        validationResults.client.valid = true;
+        validationResults.client.data = clientByPhone;
+        validationResults.client.message = `Cliente encontrado: ${clientByPhone.name} (${clientByPhone.phone})`;
+      } else {
+        validationResults.client.message = `Nenhum cliente encontrado com o telefone "${input.clientPhone}". Um novo cliente será criado durante o agendamento.`;
+      }
+    }
+  }
+
   const isFullyValid =
     validationResults.service.valid &&
     validationResults.professional.valid &&
@@ -360,6 +470,11 @@ export async function handleValidateAppointment(
     validationResults.professional.data
   ) {
     validationMessage = `Agendamento válido para ${validationResults.service.data.name} com ${validationResults.professional.data.name} em ${date} às ${input.time}`;
+
+    // Add client information to the message if available
+    if (validationResults.client.valid && validationResults.client.data) {
+      validationMessage += ` para ${validationResults.client.data.name}`;
+    }
   }
 
   return {
@@ -368,11 +483,32 @@ export async function handleValidateAppointment(
       service: validationResults.service,
       professional: validationResults.professional,
       availability: validationResults.availability,
+      client: validationResults.client,
       date: date,
       time: input.time,
       message: validationMessage,
     },
   };
+}
+
+// Function to find clients by name
+async function findClientsByName(
+  supabase: SupabaseClient,
+  name: string,
+  businessId: string
+) {
+  const { data, error } = await supabase
+    .from("clients")
+    .select("id, name, phone")
+    .ilike("name", `%${name}%`)
+    .eq("business_id", businessId);
+
+  if (error) {
+    console.error("Error finding clients by name:", error);
+    return null;
+  }
+
+  return data;
 }
 
 export async function handleCreateAppointment(
@@ -442,36 +578,76 @@ export async function handleCreateAppointment(
   professionalId = professionalData.id;
   professionalName = professionalData.name;
 
+  // Check if client exists by name first
+  const clientsByName = await findClientsByName(
+    supabase,
+    input.clientName,
+    businessId
+  );
+
   // Check if client exists or create new
   let clientId;
-  const { data: existingClient } = await supabase
-    .from("clients")
-    .select("id")
-    .eq("phone", input.clientPhone)
-    .eq("business_id", businessId)
-    .single();
+  let clientConfirmation = "";
 
-  if (existingClient) {
-    clientId = existingClient.id;
-    await supabase
+  // If we found multiple clients with the same name, check if any match the phone number
+  if (clientsByName && clientsByName.length > 0) {
+    // Check if any of the clients have the same phone number
+    const exactMatch = clientsByName.find((c) => c.phone === input.clientPhone);
+
+    if (exactMatch) {
+      // We found an exact match by name and phone
+      clientId = exactMatch.id;
+      clientConfirmation = `Cliente existente encontrado: ${exactMatch.name} (${exactMatch.phone})`;
+    } else if (clientsByName.length > 1) {
+      // Multiple clients with the same name but different phones
+      const clientOptions = clientsByName
+        .map((c) => `${c.name} (${c.phone})`)
+        .join(", ");
+      throw new Error(
+        `Encontramos vários clientes com o nome "${input.clientName}". Por favor, confirme qual é o correto: ${clientOptions}`
+      );
+    }
+  }
+
+  // If no client was found by name, check by phone
+  if (!clientId) {
+    const { data: existingClient } = await supabase
       .from("clients")
-      .update({ name: input.clientName })
-      .eq("id", clientId);
-  } else {
-    const { data: newClient, error: clientError } = await supabase
-      .from("clients")
-      .insert({
-        name: input.clientName,
-        phone: input.clientPhone,
-        business_id: businessId,
-      })
-      .select("id")
+      .select("id, name")
+      .eq("phone", input.clientPhone)
+      .eq("business_id", businessId)
       .single();
 
-    if (clientError) {
-      throw new Error(`Erro ao criar cliente: ${clientError.message}`);
+    if (existingClient) {
+      clientId = existingClient.id;
+      // Update the client name if it's different
+      if (existingClient.name !== input.clientName) {
+        await supabase
+          .from("clients")
+          .update({ name: input.clientName })
+          .eq("id", clientId);
+        clientConfirmation = `Cliente atualizado: ${existingClient.name} → ${input.clientName} (${input.clientPhone})`;
+      } else {
+        clientConfirmation = `Cliente existente encontrado: ${existingClient.name} (${input.clientPhone})`;
+      }
+    } else {
+      // Create a new client
+      const { data: newClient, error: clientError } = await supabase
+        .from("clients")
+        .insert({
+          name: input.clientName,
+          phone: input.clientPhone,
+          business_id: businessId,
+        })
+        .select("id")
+        .single();
+
+      if (clientError) {
+        throw new Error(`Erro ao criar cliente: ${clientError.message}`);
+      }
+      clientId = newClient.id;
+      clientConfirmation = `Novo cliente criado: ${input.clientName} (${input.clientPhone})`;
     }
-    clientId = newClient.id;
   }
 
   // Calculate appointment times
@@ -524,6 +700,7 @@ export async function handleCreateAppointment(
         clientName: input.clientName,
         clientPhone: input.clientPhone,
       },
+      clientConfirmation,
     },
   };
 }

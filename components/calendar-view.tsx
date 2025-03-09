@@ -207,22 +207,12 @@ export function CalendarView() {
   }, [currentDateTimestamp, view]); // Usar timestamp para evitar chamadas desnecessárias
 
   useEffect(() => {
-    // Atualizar visibleDays quando daysToShow mudar (agora memoizado)
-    setVisibleDays(daysToShow);
-  }, [daysToShow]);
-
-  useEffect(() => {
     // Lidar com resize e atualizar visibleDays conforme necessário
     const handleResize = () => {
       if (window.innerWidth < 640 && view === "week") {
-        const todayIndex = weekDays.findIndex((day) =>
-          isSameDay(day, new Date())
-        );
-        if (todayIndex >= 0 && todayIndex < 6) {
-          setVisibleDays([weekDays[todayIndex], weekDays[todayIndex + 1]]);
-        } else {
-          setVisibleDays(weekDays.slice(0, 2));
-        }
+        // Mostrar 4 dias no modo responsivo
+        const newVisibleDays = [...weekDays].slice(0, 4);
+        setVisibleDays(newVisibleDays);
       } else {
         setVisibleDays(daysToShow);
       }
@@ -231,21 +221,57 @@ export function CalendarView() {
     handleResize();
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
-  }, [view, weekDays]); // weekDays agora memoizado
+  }, [view, weekDays, daysToShow]);
+
+  // Manter um estado separado para o índice do primeiro dia visível no modo responsivo
+  const [firstVisibleDayIndex, setFirstVisibleDayIndex] = useState(0);
+
+  // Atualizar os dias visíveis quando o índice mudar
+  useEffect(() => {
+    if (window.innerWidth < 640 && view === "week") {
+      // Garantir que o índice não ultrapasse o limite
+      const safeIndex = Math.min(firstVisibleDayIndex, 3);
+      setVisibleDays(weekDays.slice(safeIndex, safeIndex + 4));
+    }
+  }, [firstVisibleDayIndex, weekDays, view]);
 
   const prev = () => {
-    const newDate =
-      view === "day" ? addDays(currentDate, -1) : addDays(currentDate, -7);
-    if (!isSameDay(newDate, currentDate)) {
-      setCurrentDate(newDate);
+    if (view === "day") {
+      // No modo dia, apenas volta um dia
+      setCurrentDate(addDays(currentDate, -1));
+    } else if (window.innerWidth < 640) {
+      // No modo semana responsivo, navega pelos dias visíveis
+      if (firstVisibleDayIndex > 0) {
+        // Se ainda há dias anteriores na semana, apenas atualiza o índice
+        setFirstVisibleDayIndex(firstVisibleDayIndex - 1);
+      } else {
+        // Se já estamos no início da semana, vamos para a semana anterior
+        setCurrentDate(addDays(currentDate, -7));
+        setFirstVisibleDayIndex(3); // Começar do final da nova semana
+      }
+    } else {
+      // No modo semana desktop, volta uma semana inteira
+      setCurrentDate(addDays(currentDate, -7));
     }
   };
 
   const next = () => {
-    const newDate =
-      view === "day" ? addDays(currentDate, 1) : addDays(currentDate, 7);
-    if (!isSameDay(newDate, currentDate)) {
-      setCurrentDate(newDate);
+    if (view === "day") {
+      // No modo dia, apenas avança um dia
+      setCurrentDate(addDays(currentDate, 1));
+    } else if (window.innerWidth < 640) {
+      // No modo semana responsivo, navega pelos dias visíveis
+      if (firstVisibleDayIndex < 3) {
+        // Se ainda há dias seguintes na semana, apenas atualiza o índice
+        setFirstVisibleDayIndex(firstVisibleDayIndex + 1);
+      } else {
+        // Se já estamos no final da semana, vamos para a próxima semana
+        setCurrentDate(addDays(currentDate, 7));
+        setFirstVisibleDayIndex(0); // Começar do início da nova semana
+      }
+    } else {
+      // No modo semana desktop, avança uma semana inteira
+      setCurrentDate(addDays(currentDate, 7));
     }
   };
 
@@ -253,6 +279,8 @@ export function CalendarView() {
     const now = new Date();
     if (!isSameDay(now, currentDate)) {
       setCurrentDate(now);
+      // Resetar o índice para mostrar o dia atual
+      setFirstVisibleDayIndex(0);
     }
   };
 
@@ -311,6 +339,37 @@ export function CalendarView() {
     }
   };
 
+  // Adicionar estado para controlar a posição da linha de horário atual
+  const [currentTimePosition, setCurrentTimePosition] = useState(0);
+
+  // Atualizar a posição da linha de horário atual a cada minuto
+  useEffect(() => {
+    const updateCurrentTimeLine = () => {
+      const now = new Date();
+      const hours = now.getHours();
+      const minutes = now.getMinutes();
+
+      // Só mostrar a linha se estiver dentro do horário de funcionamento (9h-19h)
+      if (hours >= 9 && hours < 19) {
+        // Calcular a posição baseada no horário atual
+        // 12px é a altura de cada slot de 30 minutos
+        const startHour = 9; // Hora de início do calendário
+        const hoursFromStart = hours - startHour;
+        const minutesPercentage = minutes / 60;
+
+        // Posição = (horas desde o início + percentual dos minutos) * altura de 2 slots (1 hora)
+        const position = (hoursFromStart + minutesPercentage) * 24;
+        setCurrentTimePosition(position);
+      }
+    };
+
+    // Atualizar imediatamente e depois a cada minuto
+    updateCurrentTimeLine();
+    const interval = setInterval(updateCurrentTimeLine, 60000);
+
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <div className="flex flex-col space-y-4">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -342,6 +401,24 @@ export function CalendarView() {
             </TabsList>
           </Tabs>
           <div className="flex -space-x-2">
+            {/* "All" avatar */}
+            <Avatar
+              key="all"
+              className={cn(
+                "h-8 w-8 border-2 border-background cursor-pointer hover:scale-105 transition-transform",
+                selectedProfessional === null && "ring-2 ring-primary"
+              )}
+              onClick={() => setSelectedProfessional(null)}
+              style={{
+                backgroundColor: "#64748b20", // Neutral color with 20% opacity
+              }}
+            >
+              <AvatarFallback style={{ backgroundColor: "#64748b20" }}>
+                All
+              </AvatarFallback>
+            </Avatar>
+
+            {/* Professional avatars */}
             {professionals.map((professional) => (
               <Avatar
                 key={professional.id}
@@ -390,7 +467,6 @@ export function CalendarView() {
       <div
         ref={calendarContainerRef}
         className="relative rounded-md border overflow-auto max-w-full"
-        style={{ height: "calc(100vh - 220px)" }}
       >
         {/* Cabeçalho com os dias - fixo no topo */}
         <div className="sticky top-0 z-20 flex bg-background border-b">
@@ -439,6 +515,19 @@ export function CalendarView() {
                 <div
                   className={`flex w-full ${view === "day" ? "" : "divide-x"}`}
                 >
+                  {/* Linha de horário atual */}
+                  {isSameDay(new Date(), currentDate) && (
+                    <div
+                      className="absolute left-0 right-0 z-30 border-t border-red-500"
+                      style={{
+                        top: `${currentTimePosition}px`,
+                        transform: "translateY(48px)", // Ajuste para compensar o cabeçalho
+                      }}
+                    >
+                      <div className="absolute -left-1 -top-1.5 h-3 w-3 rounded-full bg-red-500" />
+                    </div>
+                  )}
+
                   {visibleDays.map((day, dayIndex) => (
                     <div key={dayIndex} className="flex-1 min-w-0">
                       {dayHours.map((hour, hourIndex) => {
@@ -502,11 +591,12 @@ export function CalendarView() {
                                     key={appointment.id}
                                     className="absolute left-0 right-0 flex flex-col rounded-md p-1 text-xs text-white cursor-pointer hover:brightness-90 transition-all overflow-hidden"
                                     style={{
-                                      backgroundColor: professional?.color,
+                                      backgroundColor:
+                                        professional?.color || "#3b82f6",
                                       height: `${heightInSlots}px`,
                                       zIndex: 10,
                                       top: 0,
-                                      minHeight: "24px", // Altura mínima para garantir que pelo menos uma linha seja visível
+                                      minHeight: "24px",
                                     }}
                                     onClick={(e) => {
                                       e.stopPropagation();
@@ -522,15 +612,13 @@ export function CalendarView() {
                                         <span className="font-medium truncate">
                                           {appointment.clients.name}
                                         </span>
-                                        <span className="text-[10px] opacity-75 whitespace-nowrap flex-shrink-0">
-                                          ({professional?.name})
+                                        <span className="truncate opacity-75">
+                                          {appointment.services.name} -{" "}
+                                          {format(startTime, "HH:mm")}
                                         </span>
                                       </div>
                                       {heightInSlots >= 32 && (
                                         <>
-                                          <span className="truncate opacity-75">
-                                            {appointment.services.name}
-                                          </span>
                                           <span className="text-[10px] opacity-75 whitespace-nowrap">
                                             {format(startTime, "HH:mm")} -{" "}
                                             {format(endTime, "HH:mm")}
