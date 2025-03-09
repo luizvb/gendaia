@@ -569,6 +569,29 @@ export function AppointmentModal({
             </Select>
           </div>
 
+          <div className="grid gap-2">
+            <Label htmlFor="service">Serviço</Label>
+            <Select
+              value={serviceId}
+              onValueChange={(value) => {
+                setServiceId(value);
+                setTime(""); // Limpar horário ao mudar de serviço
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione um serviço" />
+              </SelectTrigger>
+              <SelectContent>
+                {services.map((service) => (
+                  <SelectItem key={service.id} value={String(service.id)}>
+                    {service.name} - {service.duration} min - R${" "}
+                    {service.price.toFixed(2)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div className="grid gap-2">
               <Label htmlFor="date">Data</Label>
@@ -625,28 +648,6 @@ export function AppointmentModal({
             </div>
           </div>
 
-          <div className="grid gap-2">
-            <Label htmlFor="service">Serviço</Label>
-            <Select
-              value={serviceId}
-              onValueChange={(value) => {
-                setServiceId(value);
-                setTime(""); // Limpar horário ao mudar de serviço
-              }}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione um serviço" />
-              </SelectTrigger>
-              <SelectContent>
-                {services.map((service) => (
-                  <SelectItem key={service.id} value={String(service.id)}>
-                    {service.name} - {service.duration} min - R${" "}
-                    {service.price.toFixed(2)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
           <div className="grid gap-2">
             <Label htmlFor="client">Cliente</Label>
             <div className="flex gap-2">
