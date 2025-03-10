@@ -137,6 +137,12 @@ export function AppointmentModal({
     }
   }, [clientSearchTerm, onClientSearch]);
 
+  // Wrap onClose to reset isCreatingClient
+  const handleClose = () => {
+    setIsCreatingClient(false);
+    onClose();
+  };
+
   // Update state when props change
   useEffect(() => {
     if (selectedAppointment) {
@@ -151,6 +157,7 @@ export function AppointmentModal({
       setClientPhone(selectedAppointment.clients.phone || "");
       setSelectedClientId(selectedAppointment.client_id);
       setNotes(selectedAppointment.notes || "");
+      setIsCreatingClient(false);
     } else if (selectedSlot) {
       // Create mode
       setIsEditMode(false);
@@ -163,6 +170,7 @@ export function AppointmentModal({
       setClientPhone("");
       setSelectedClientId(null);
       setNotes("");
+      setIsCreatingClient(false);
     } else {
       // Reset form
       setIsEditMode(false);
@@ -175,6 +183,7 @@ export function AppointmentModal({
       setClientPhone("");
       setSelectedClientId(null);
       setNotes("");
+      setIsCreatingClient(false);
     }
   }, [selectedSlot, selectedAppointment, services]);
 
@@ -229,69 +238,17 @@ export function AppointmentModal({
     setClientPhone(client.phone || "");
     setSelectedClientId(client.id);
     setIsClientPopoverOpen(false);
-  };
-
-  const handleCreateClient = async () => {
-    if (!clientName || !clientPhone) {
-      toast.error("Nome e telefone são obrigatórios");
-      return;
-    }
-
-    try {
-      setIsLoading(true);
-
-      const selectedProfessional = professionals.find(
-        (p) => p.id === professionalId
-      );
-
-      if (!selectedProfessional) {
-        toast.error("Selecione um profissional primeiro");
-        return;
-      }
-
-      const response = await fetch("/api/clients", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          name: clientName,
-          phone: clientPhone,
-          email: newClientEmail || undefined,
-          business_id: selectedProfessional.business_id,
-        }),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Falha ao criar cliente");
-      }
-
-      const newClient = await response.json();
-      const createdClient = {
-        id: newClient[0].id,
-        name: clientName,
-        phone: clientPhone,
-        email: newClientEmail || undefined,
-      };
-
-      setSelectedClientId(createdClient.id);
+    // Cancela o modo de criação de cliente se estiver ativo
+    if (isCreatingClient) {
       setIsCreatingClient(false);
-      toast.success("Cliente criado com sucesso!");
-
-      // Notify parent component about the new client
-      onClientCreated?.(createdClient);
-    } catch (error) {
-      console.error("Erro ao criar cliente:", error);
-      toast.error("Não foi possível criar o cliente");
-    } finally {
-      setIsLoading(false);
     }
   };
 
   const handleSubmit = async () => {
+    console.log("Iniciando handleSubmit");
     try {
       setIsLoading(true);
+      console.log("Validando campos...");
 
       if (
         !date ||
@@ -301,54 +258,86 @@ export function AppointmentModal({
         !clientName ||
         !clientPhone
       ) {
+        console.log("Campos obrigatórios faltando:", {
+          date,
+          time,
+          professionalId,
+          serviceId,
+          clientName,
+          clientPhone,
+        });
         toast.error("Por favor, preencha todos os campos obrigatórios");
         return;
       }
 
+      console.log("Todos os campos preenchidos, buscando serviço...");
       const selectedService = services.find((s) => s.id === serviceId);
       if (!selectedService) {
+        console.log("Serviço não encontrado para ID:", serviceId);
         toast.error("Serviço inválido");
         return;
       }
 
+      console.log("Serviço encontrado:", selectedService);
       const [hours, minutes] = time.split(":");
       const startTime = new Date(date);
       startTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
 
       const endTime = new Date(startTime);
       endTime.setMinutes(endTime.getMinutes() + selectedService.duration);
+      console.log("Horários calculados:", { startTime, endTime });
 
+      console.log("Buscando profissional...");
       const selectedProfessional = professionals.find(
         (p) => p.id === professionalId
       );
       if (!selectedProfessional) {
+        console.log("Profissional não encontrado para ID:", professionalId);
         toast.error("Profissional inválido");
         return;
       }
+      console.log("Profissional encontrado:", selectedProfessional);
 
       // Verificar disponibilidade antes de criar/atualizar
+      console.log("Verificando disponibilidade...");
       const formattedDate = format(startTime, "yyyy-MM-dd");
       const availabilityResponse = await fetch(
         `/api/availability?professional_id=${professionalId}&date=${formattedDate}&service_duration=${selectedService.duration}`
       );
 
       if (!availabilityResponse.ok) {
+        console.log(
+          "Erro ao verificar disponibilidade:",
+          await availabilityResponse.text()
+        );
         throw new Error("Falha ao verificar disponibilidade");
       }
 
       const availabilityData = await availabilityResponse.json();
       const timeStr = format(startTime, "HH:mm");
+      console.log("Disponibilidade verificada:", {
+        availableSlots: availabilityData.available_slots,
+        requestedTime: timeStr,
+      });
 
       // Se for edição, permitir o mesmo horário
       if (!isEditMode && !availabilityData.available_slots.includes(timeStr)) {
+        console.log("Horário não disponível");
         toast.error("Este horário não está mais disponível");
         return;
       }
 
       let clientId = selectedClientId;
+      console.log("Estado inicial do cliente:", {
+        clientId,
+        isCreatingClient,
+        clientName,
+        clientPhone,
+      });
 
-      // Se não tiver um cliente selecionado, criar um novo
-      if (!clientId) {
+      // Se não tiver um cliente selecionado ou estiver criando um novo, criar um novo
+      if (!clientId || isCreatingClient) {
+        console.log("Criando novo cliente...");
         const clientResponse = await fetch("/api/clients", {
           method: "POST",
           headers: {
@@ -362,79 +351,131 @@ export function AppointmentModal({
           }),
         });
 
+        console.log("Resposta da API de cliente recebida");
         if (!clientResponse.ok) {
-          const error = await clientResponse.json();
+          const errorText = await clientResponse.text();
+          console.log("Erro na resposta da API de cliente:", errorText);
+          const error = JSON.parse(errorText);
           throw new Error(error.error || "Falha ao criar/buscar cliente");
         }
 
         const client = await clientResponse.json();
-        clientId = client[0].id;
+        console.log("Cliente criado com sucesso, resposta:", client);
+
+        // Corrigir acesso ao ID do cliente - a API está retornando o objeto diretamente, não um array
+        clientId = client.id; // Antes era client[0].id
+        console.log("Cliente criado com ID:", clientId);
 
         // Notify parent component about the new client
         onClientCreated?.({
-          id: client[0].id,
+          id: client.id, // Antes era client[0].id
           name: clientName,
           phone: clientPhone,
           email: newClientEmail || undefined,
         });
+
+        // Não precisamos mais do modo de criação de cliente
+        setIsCreatingClient(false);
       }
 
-      if (isEditMode && selectedAppointment) {
-        // Atualizar agendamento existente
-        const response = await fetch("/api/appointments", {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            id: selectedAppointment.id,
+      // Garantir que temos um ID de cliente válido
+      if (!clientId) {
+        console.log("ID de cliente inválido após criação/seleção");
+        toast.error(
+          "Erro ao identificar o cliente. Por favor, tente novamente."
+        );
+        return;
+      }
+
+      console.log(
+        "Prosseguindo para criar/atualizar agendamento com cliente ID:",
+        clientId
+      );
+
+      try {
+        if (isEditMode && selectedAppointment) {
+          // Atualizar agendamento existente
+          console.log("Atualizando agendamento existente...");
+          const response = await fetch("/api/appointments", {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              id: selectedAppointment.id,
+              start_time: startTime.toISOString(),
+              end_time: endTime.toISOString(),
+              professional_id: professionalId,
+              service_id: serviceId,
+              client_id: String(clientId),
+              notes,
+              status: "scheduled",
+              business_id: selectedProfessional.business_id,
+            }),
+          });
+
+          console.log("Resposta da API de atualização recebida");
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.log("Erro na resposta da API de atualização:", errorText);
+            throw new Error("Falha ao atualizar agendamento");
+          }
+
+          console.log("Agendamento atualizado com sucesso");
+          toast.success("Agendamento atualizado com sucesso!");
+          onAppointmentUpdated?.();
+        } else {
+          // Criar novo agendamento
+          console.log("Criando novo agendamento...");
+          console.log("Dados do agendamento:", {
             start_time: startTime.toISOString(),
             end_time: endTime.toISOString(),
             professional_id: professionalId,
             service_id: serviceId,
-            client_id: String(clientId || 0),
-            notes,
-            status: "scheduled",
+            client_id: String(clientId),
             business_id: selectedProfessional.business_id,
-          }),
-        });
+          });
 
-        if (!response.ok) {
-          const error = await response.json();
-          throw new Error(error.error || "Falha ao atualizar agendamento");
+          const response = await fetch("/api/appointments", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              start_time: startTime.toISOString(),
+              end_time: endTime.toISOString(),
+              professional_id: professionalId,
+              service_id: serviceId,
+              client_id: String(clientId),
+              notes,
+              status: "scheduled",
+              business_id: selectedProfessional.business_id,
+            }),
+          });
+
+          console.log("Resposta da API de criação recebida");
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.log("Erro na resposta da API de criação:", errorText);
+            throw new Error("Falha ao criar agendamento");
+          }
+
+          const result = await response.json();
+          console.log("Agendamento criado com sucesso:", result);
+
+          toast.success("Agendamento criado com sucesso!");
+          onAppointmentCreated?.();
         }
-
-        toast.success("Agendamento atualizado com sucesso!");
-        onAppointmentUpdated?.();
-      } else {
-        // Criar novo agendamento
-        const response = await fetch("/api/appointments", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            start_time: startTime.toISOString(),
-            end_time: endTime.toISOString(),
-            professional_id: professionalId,
-            service_id: serviceId,
-            client_id: String(clientId || 0),
-            notes,
-            status: "scheduled",
-            business_id: selectedProfessional.business_id,
-          }),
-        });
-
-        if (!response.ok) {
-          const error = await response.json();
-          throw new Error(error.error || "Falha ao criar agendamento");
-        }
-
-        toast.success("Agendamento criado com sucesso!");
-        onAppointmentCreated?.();
+      } catch (appointmentError) {
+        console.error(
+          "Erro específico na criação/atualização do agendamento:",
+          appointmentError
+        );
+        throw appointmentError;
       }
 
-      onClose();
+      console.log("Processo completo, fechando modal");
+      handleClose();
     } catch (error) {
       console.error("Erro ao processar agendamento:", error);
       toast.error(
@@ -532,7 +573,7 @@ export function AppointmentModal({
   }, [clients, clientSearchTerm]);
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[500px] backdrop-blur-xl bg-background/80 border border-border/50">
         <DialogHeader>
           <DialogTitle>
@@ -737,31 +778,12 @@ export function AppointmentModal({
                   placeholder="(00) 00000-0000"
                 />
               </div>
-
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setIsCreatingClient(false);
-                    if (!selectedClientId) {
-                      setClientName("");
-                      setClientPhone("");
-                      setNewClientEmail("");
-                    }
-                  }}
-                >
-                  Cancelar
-                </Button>
-                <Button onClick={handleCreateClient} disabled={isLoading}>
-                  {isLoading ? "Salvando..." : "Salvar Cliente"}
-                </Button>
-              </div>
             </>
           ) : null}
 
           <div className="grid gap-2">
             <Label htmlFor="notes">Observações</Label>
-            <Textarea
+            <Input
               id="notes"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
@@ -780,7 +802,7 @@ export function AppointmentModal({
             </Button>
           )}
           <div className="flex gap-2">
-            <Button variant="outline" onClick={onClose}>
+            <Button variant="outline" onClick={handleClose}>
               Cancelar
             </Button>
             <Button onClick={handleSubmit} disabled={isLoading || isDeleting}>
