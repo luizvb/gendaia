@@ -3,7 +3,13 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { addDays, addHours, format, isSameDay, startOfWeek } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { ChevronLeft, ChevronRight, Plus, ClipboardCopy } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Plus,
+  ClipboardCopy,
+  Menu,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -11,6 +17,15 @@ import { AppointmentModal } from "./appointment-modal";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface Professional {
   id: string;
@@ -391,7 +406,7 @@ export function CalendarView() {
           <Button variant="outline" size="sm" onClick={today}>
             Hoje
           </Button>
-          <span className="ml-2 text-sm text-muted-foreground truncate max-w-[150px] sm:max-w-none">
+          <span className="hidden sm:inline-block ml-2 text-sm text-muted-foreground truncate max-w-[150px] sm:max-w-none">
             {formatDateTitle()}
           </span>
         </div>
@@ -407,7 +422,9 @@ export function CalendarView() {
               <TabsTrigger value="week">Semana</TabsTrigger>
             </TabsList>
           </Tabs>
-          <div className="flex -space-x-2">
+
+          {/* Desktop view - show avatars and booking button directly */}
+          <div className="hidden md:flex md:-space-x-2">
             {/* "All" avatar */}
             <Avatar
               key="all"
@@ -462,13 +479,95 @@ export function CalendarView() {
 
           {businessSubdomain && (
             <Button
-              className="gap-2 whitespace-nowrap"
+              className="gap-2 whitespace-nowrap hidden md:flex"
               onClick={copyBookingUrl}
             >
               <ClipboardCopy className="h-4 w-4" />
-              Copiar URL de Agendamento
+              URL Agendamento
             </Button>
           )}
+
+          {/* Mobile dropdown menu */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild className="md:hidden">
+              <Button variant="outline" size="icon">
+                <Menu className="h-4 w-4" />
+                <span className="sr-only">Menu</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel>Profissionais</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuGroup>
+                <DropdownMenuItem
+                  className="flex items-center gap-2 cursor-pointer"
+                  onClick={() => setSelectedProfessional(null)}
+                >
+                  <Avatar
+                    className={cn(
+                      "h-6 w-6 border-2 border-background",
+                      selectedProfessional === null && "ring-1 ring-primary"
+                    )}
+                    style={{ backgroundColor: "#64748b20" }}
+                  >
+                    <AvatarFallback style={{ backgroundColor: "#64748b20" }}>
+                      All
+                    </AvatarFallback>
+                  </Avatar>
+                  <span>Todos</span>
+                </DropdownMenuItem>
+
+                {professionals.map((professional) => (
+                  <DropdownMenuItem
+                    key={professional.id}
+                    className="flex items-center gap-2 cursor-pointer"
+                    onClick={() =>
+                      setSelectedProfessional(
+                        selectedProfessional === professional.id
+                          ? null
+                          : professional.id
+                      )
+                    }
+                  >
+                    <Avatar
+                      className={cn(
+                        "h-6 w-6 border-2 border-background",
+                        selectedProfessional === professional.id &&
+                          "ring-1 ring-primary"
+                      )}
+                      style={{ backgroundColor: `${professional.color}20` }}
+                    >
+                      <AvatarImage
+                        src={`https://api.dicebear.com/7.x/initials/svg?seed=${professional.name}`}
+                      />
+                      <AvatarFallback
+                        style={{ backgroundColor: `${professional.color}20` }}
+                      >
+                        {professional.name
+                          .split(" ")
+                          .map((n) => n[0])
+                          .join("")}
+                      </AvatarFallback>
+                    </Avatar>
+                    <span>{professional.name}</span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuGroup>
+
+              {businessSubdomain && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="flex items-center gap-2 cursor-pointer"
+                    onClick={copyBookingUrl}
+                  >
+                    <ClipboardCopy className="h-4 w-4" />
+                    <span>Copiar URL de Agendamento</span>
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 

@@ -237,6 +237,7 @@ export default function DashboardLayout({
                           ? "bg-primary text-primary-foreground"
                           : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                       )}
+                      onClick={() => isMobile && setIsDrawerOpen(false)}
                     >
                       <item.icon className="h-5 w-5" />
                       <span>{item.name}</span>
