@@ -3,7 +3,8 @@
     "short_name": "GENDAIA",
     "description": "GENDAIA Dashboard",
     "start_url": "/dashboard",
-    "display": "standalone",
+    "display": "fullscreen",
+    "orientation": "portrait",
     "background_color": "#ffffff",
     "theme_color": "#000000",
     "icons": [
@@ -19,5 +20,18 @@
             "type": "image/png",
             "purpose": "any maskable"
         }
-    ]
+    ],
+    "shortcuts": [
+        {
+            "name": "Dashboard",
+            "url": "/dashboard/calendar",
+            "icons": [
+                {
+                    "src": "/images/icon-192x192.png",
+                    "sizes": "192x192"
+                }
+            ]
+        }
+    ],
+    "prefer_related_applications": false
 }

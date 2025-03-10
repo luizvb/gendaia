@@ -8,7 +8,6 @@ import {
   LogOut,
   Bot,
   Menu,
-  User,
   Maximize,
   Minimize,
   Download,
@@ -51,27 +50,66 @@ function useFullscreen() {
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   const toggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      document.documentElement
-        .requestFullscreen()
-        .then(() => {
-          setIsFullscreen(true);
-        })
-        .catch((err) => {
-          console.error(`Erro ao entrar em fullscreen: ${err.message}`);
-        });
+    // Check if running on mobile device
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+    if (isMobile) {
+      // For mobile devices, try to use fullscreen API first
+      if (!document.fullscreenElement) {
+        if (document.documentElement.requestFullscreen) {
+          document.documentElement
+            .requestFullscreen()
+            .then(() => {
+              setIsFullscreen(true);
+            })
+            .catch((err) => {
+              console.error(`Error entering fullscreen: ${err.message}`);
+              // If fullscreen fails, we'll return false so the PWA prompt can be shown
+              return false;
+            });
+        } else {
+          // Fullscreen API not supported, return false to show PWA prompt
+          return false;
+        }
+      } else {
+        if (document.exitFullscreen) {
+          document
+            .exitFullscreen()
+            .then(() => {
+              setIsFullscreen(false);
+            })
+            .catch((err) => {
+              console.error(`Error exiting fullscreen: ${err.message}`);
+            });
+        }
+      }
     } else {
-      if (document.exitFullscreen) {
-        document
-          .exitFullscreen()
+      // Desktop behavior remains the same
+      if (!document.fullscreenElement) {
+        document.documentElement
+          .requestFullscreen()
           .then(() => {
-            setIsFullscreen(false);
+            setIsFullscreen(true);
           })
           .catch((err) => {
-            console.error(`Erro ao sair do fullscreen: ${err.message}`);
+            console.error(`Error entering fullscreen: ${err.message}`);
           });
+      } else {
+        if (document.exitFullscreen) {
+          document
+            .exitFullscreen()
+            .then(() => {
+              setIsFullscreen(false);
+            })
+            .catch((err) => {
+              console.error(`Error exiting fullscreen: ${err.message}`);
+            });
+        }
       }
     }
+
+    // Return true if fullscreen was toggled successfully
+    return !!document.fullscreenElement || !isMobile;
   };
 
   useEffect(() => {
@@ -158,6 +196,15 @@ export default function DashboardLayout({
       .toUpperCase();
   };
 
+  const handleFullscreenClick = () => {
+    // If toggleFullscreen returns false, it means fullscreen failed or isn't supported
+    // In that case, show the PWA prompt
+    const fullscreenToggled = toggleFullscreen();
+    if (!fullscreenToggled) {
+      setShowPrompt(true);
+    }
+  };
+
   return (
     <div className="flex h-screen overflow-hidden">
       <Sidebar className="z-30" />
@@ -199,13 +246,6 @@ export default function DashboardLayout({
               </SheetContent>
             </Sheet>
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="icon" className="relative">
-                <Bell className="h-5 w-5" />
-                <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] font-medium text-primary-foreground">
-                  3
-                </span>
-                <span className="sr-only">Notificações</span>
-              </Button>
               <Button
                 variant="ghost"
                 size="icon"
@@ -263,7 +303,7 @@ export default function DashboardLayout({
               <Button
                 variant="outline"
                 size="icon"
-                onClick={toggleFullscreen}
+                onClick={handleFullscreenClick}
                 title={
                   isFullscreen
                     ? "Sair do modo tela cheia"
@@ -375,7 +415,7 @@ export default function DashboardLayout({
               "fixed md:fixed top-16 right-0 bg-background z-30",
               "transition-transform duration-300 shadow-lg",
               "md:w-[400px] md:h-[calc(100vh-4rem)]",
-              "w-full h-[calc(100vh-4rem)]",
+              "w-full h-[calc(100vh-9rem)]",
               "flex flex-col",
               isDrawerOpen ? "translate-x-0" : "translate-x-full"
             )}
