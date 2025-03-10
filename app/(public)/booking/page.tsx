@@ -54,6 +54,8 @@ export default function BookingPage() {
   const [appointments, setAppointments] = useState<any[]>([]);
   const [timeSlots, setTimeSlots] = useState<string[]>([]);
   const [loadingAppointments, setLoadingAppointments] = useState(false);
+  const [business, setBusiness] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   // Carregar telefone do localStorage ao iniciar
   useEffect(() => {
@@ -98,6 +100,81 @@ export default function BookingPage() {
       setTimeSlots([]);
     }
   }, [date, professional, service]);
+
+  useEffect(() => {
+    const fetchBusinessData = async () => {
+      try {
+        setIsLoading(true);
+
+        // Get subdomain from the hostname
+        const hostname = window.location.hostname;
+        let subdomain;
+
+        if (hostname.includes(".gendaia.com.br")) {
+          subdomain = hostname.split(".")[0];
+        } else {
+          // For local development, get from query param
+          const urlParams = new URLSearchParams(window.location.search);
+          subdomain = urlParams.get("business");
+        }
+
+        if (!subdomain) {
+          throw new Error("Business not specified");
+        }
+
+        // Fetch business data by subdomain
+        const response = await fetch(
+          `/api/businesses/by-subdomain?subdomain=${subdomain}`
+        );
+
+        if (!response.ok) {
+          throw new Error("Failed to load business data");
+        }
+
+        const businessData = await response.json();
+        setBusiness(businessData);
+
+        // Now fetch other data needed for booking using the business ID
+        await fetchData(businessData.id);
+      } catch (err) {
+        console.error("Error fetching business:", err);
+        setError(err instanceof Error ? err.message : "Unknown error");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchBusinessData();
+  }, []);
+
+  const fetchData = async (businessId: string) => {
+    try {
+      // Fetch professionals
+      const professionalsResponse = await fetch(
+        `/api/professionals?business_id=${businessId}`
+      );
+      if (!professionalsResponse.ok)
+        throw new Error("Failed to load professionals");
+      const professionalsData = await professionalsResponse.json();
+      setProfessionals(professionalsData);
+
+      // Fetch services
+      const servicesResponse = await fetch(
+        `/api/services?business_id=${businessId}`
+      );
+      if (!servicesResponse.ok) throw new Error("Failed to load services");
+      const servicesData = await servicesResponse.json();
+      setServices(servicesData);
+
+      // Set initial professional if available
+      if (professionalsData.length > 0) {
+        setProfessional(professionalsData[0].id);
+      }
+    } catch (err) {
+      console.error("Error fetching data:", err);
+      setError(err instanceof Error ? err.message : "Unknown error");
+    }
+  };
 
   const generateTimeSlots = async () => {
     if (!date || !professional || !service) {
@@ -261,10 +338,32 @@ export default function BookingPage() {
     }
   };
 
+  if (isLoading) {
+    return (
+      <div className="container mx-auto p-4 flex items-center justify-center min-h-[50vh]">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+          <p className="mt-4 text-muted-foreground">Carregando...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !business) {
+    return (
+      <div className="container mx-auto p-4">
+        <div className="bg-destructive/10 p-4 rounded-md">
+          <h2 className="text-lg font-semibold text-destructive">Erro</h2>
+          <p>{error || "Negócio não encontrado"}</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="container mx-auto max-w-4xl py-8">
       <div className="mb-8 text-center">
-        <h1 className="text-3xl font-bold">Agendamento Online</h1>
+        <h1 className="text-3xl font-bold">{business.name} - Agendamento</h1>
         <p className="text-muted-foreground">
           Agende seu horário ou consulte seus agendamentos
         </p>

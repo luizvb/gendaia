@@ -36,6 +36,21 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // If subdomain is not set, generate one from the business name
+    if (!business.subdomain && business.name) {
+      const subdomain = `${business.name
+        .toLowerCase()
+        .replace(/\s+/g, "-")}.gendaia.com.br`;
+
+      // Update the business record with the generated subdomain
+      await supabase
+        .from("businesses")
+        .update({ subdomain })
+        .eq("id", businessId);
+
+      business.subdomain = subdomain;
+    }
+
     // Buscar horários de funcionamento
     const { data: businessHours, error: hoursError } = await supabase
       .from("business_hours")

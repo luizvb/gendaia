@@ -11,21 +11,32 @@ import {
 async function getServicesHandler(request: NextRequest) {
   try {
     const supabase = await createClient();
+    const { searchParams } = new URL(request.url);
+    const publicBusinessId = searchParams.get("business_id");
 
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    // If business_id is provided in query params, use it (public access)
+    // Otherwise, get from session (authenticated access)
+    let businessId;
 
-    // Get the business_id using our utility function
-    const businessId = await getBusinessId(request);
-    if (!businessId) {
-      return NextResponse.json(
-        { error: "Business not found" },
-        { status: 404 }
-      );
+    if (publicBusinessId) {
+      businessId = publicBusinessId;
+    } else {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+
+      // Get the business_id using our utility function
+      businessId = await getBusinessId(request);
+      if (!businessId) {
+        return NextResponse.json(
+          { error: "Business not found" },
+          { status: 404 }
+        );
+      }
     }
 
     // Execute query

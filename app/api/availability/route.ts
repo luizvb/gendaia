@@ -22,6 +22,7 @@ export async function GET(request: Request) {
     const serviceDuration = parseInt(
       searchParams.get("service_duration") || "30"
     );
+    const businessId = searchParams.get("business_id");
 
     if (!professionalId || !date) {
       return NextResponse.json(
@@ -34,13 +35,19 @@ export async function GET(request: Request) {
     const supabase = await createClient();
 
     // Buscar agendamentos existentes para o profissional no dia
-    const { data: appointments, error } = await supabase
+    let query = supabase
       .from("appointments")
       .select("start_time, end_time")
       .eq("professional_id", professionalId)
       .gte("start_time", `${date}T00:00:00`)
-      .lt("start_time", `${date}T23:59:59`)
-      .order("start_time");
+      .lt("start_time", `${date}T23:59:59`);
+
+    // Add business_id filter if provided
+    if (businessId) {
+      query = query.eq("business_id", businessId);
+    }
+
+    const { data: appointments, error } = await query.order("start_time");
 
     if (error) {
       console.error("Erro ao buscar agendamentos:", error);

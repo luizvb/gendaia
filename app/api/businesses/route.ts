@@ -44,6 +44,46 @@ export async function POST(request: NextRequest) {
       throw businessError;
     }
 
+    // Create Vercel subdomain
+    try {
+      const businessName = businessData.name.toLowerCase().replace(/\s+/g, "-");
+      const subdomain = `${businessName}.gendaia.com.br`;
+
+      // Call Vercel API to create subdomain
+      const vercelResponse = await fetch(
+        "https://api.vercel.com/v10/projects/gendaia/domains",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${process.env.VERCEL_API_TOKEN}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            name: subdomain,
+          }),
+        }
+      );
+
+      if (!vercelResponse.ok) {
+        console.error(
+          "Failed to create Vercel subdomain:",
+          await vercelResponse.text()
+        );
+      }
+
+      // Store the subdomain in the business record
+      await supabase
+        .from("businesses")
+        .update({ subdomain })
+        .eq("id", business.id);
+
+      // Add subdomain to the response
+      business.subdomain = subdomain;
+    } catch (error) {
+      console.error("Error creating subdomain:", error);
+      // Continue even if subdomain creation fails
+    }
+
     return NextResponse.json(business, { status: 201 });
   } catch (error) {
     console.error("Error creating business:", error);

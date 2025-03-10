@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { addDays, addHours, format, isSameDay, startOfWeek } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, ClipboardCopy } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -67,6 +67,10 @@ export function CalendarView() {
   const [selectedProfessional, setSelectedProfessional] = useState<
     string | null
   >(null);
+  const [businessSubdomain, setBusinessSubdomain] = useState<string | null>(
+    null
+  );
+  const [showCopyToast, setShowCopyToast] = useState(false);
 
   const calendarContainerRef = useRef<HTMLDivElement>(null);
 
@@ -339,10 +343,43 @@ export function CalendarView() {
     }
   };
 
+  const fetchBusinessInfo = async () => {
+    try {
+      const response = await fetch("/api/settings");
+      if (response.ok) {
+        const data = await response.json();
+        if (data.business && data.business.subdomain) {
+          setBusinessSubdomain(data.business.subdomain);
+        } else if (data.business && data.business.name) {
+          // Generate subdomain from name if not set
+          const subdomain = `${data.business.name
+            .toLowerCase()
+            .replace(/\s+/g, "-")}.gendaia.com.br`;
+          setBusinessSubdomain(subdomain);
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching business info:", error);
+    }
+  };
+
+  const copyBookingUrl = () => {
+    if (businessSubdomain) {
+      navigator.clipboard.writeText(`https://${businessSubdomain}`);
+      setShowCopyToast(true);
+      setTimeout(() => setShowCopyToast(false), 3000);
+    }
+  };
+
+  useEffect(() => {
+    fetchBusinessInfo();
+    // ... existing code in useEffect
+  }, []);
+
   return (
-    <div className="flex flex-col space-y-4">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-2">
+    <div className="h-full flex flex-col">
+      <div className="flex justify-between items-center mb-4">
+        <div className="flex items-center space-x-2">
           <Button variant="outline" size="icon" onClick={prev}>
             <ChevronLeft className="h-4 w-4" />
             <span className="sr-only">Anterior</span>
@@ -358,7 +395,8 @@ export function CalendarView() {
             {formatDateTitle()}
           </span>
         </div>
-        <div className="flex items-center gap-4">
+
+        <div className="flex items-center space-x-2">
           <Tabs
             value={view}
             onValueChange={(v) => setView(v as "day" | "week")}
@@ -421,14 +459,16 @@ export function CalendarView() {
               </Avatar>
             ))}
           </div>
-          <Button
-            onClick={() => setIsModalOpen(true)}
-            className="gap-2 whitespace-nowrap"
-          >
-            <Plus className="h-4 w-4" />
-            <span className="hidden sm:inline">Novo Agendamento</span>
-            <span className="sm:hidden">Novo</span>
-          </Button>
+
+          {businessSubdomain && (
+            <Button
+              className="gap-2 whitespace-nowrap"
+              onClick={copyBookingUrl}
+            >
+              <ClipboardCopy className="h-4 w-4" />
+              Copiar URL de Agendamento
+            </Button>
+          )}
         </div>
       </div>
 
@@ -627,6 +667,12 @@ export function CalendarView() {
         onAppointmentCreated={fetchAppointments}
         onAppointmentUpdated={fetchAppointments}
       />
+
+      {showCopyToast && (
+        <div className="fixed bottom-4 right-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded shadow-md">
+          URL de agendamento copiado para a área de transferência!
+        </div>
+      )}
     </div>
   );
 }
