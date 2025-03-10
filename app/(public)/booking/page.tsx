@@ -106,16 +106,14 @@ export default function BookingPage() {
       try {
         setIsLoading(true);
 
-        // Get subdomain from the hostname
+        // Get subdomain from the hostname or query string
         const hostname = window.location.hostname;
-        let subdomain;
+        const urlParams = new URLSearchParams(window.location.search);
+        let subdomain = urlParams.get("subdomain") || urlParams.get("business");
 
-        if (hostname.includes(".gendaia.com.br")) {
+        // If not in query string, try to get from hostname
+        if (!subdomain && hostname.includes(".gendaia.com.br")) {
           subdomain = hostname.split(".")[0];
-        } else {
-          // For local development, get from query param
-          const urlParams = new URLSearchParams(window.location.search);
-          subdomain = urlParams.get("business");
         }
 
         if (!subdomain) {
@@ -266,7 +264,7 @@ export default function BookingPage() {
           end_time: endTime.toISOString(),
           professional_id: professional,
           service_id: service,
-          business_id: "1", // Em um sistema real, você obteria o ID do negócio de alguma forma
+          business_id: business.id,
           status: "scheduled",
         }),
       });

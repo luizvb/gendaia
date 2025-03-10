@@ -12,6 +12,7 @@ import {
   Scissors,
   Settings,
   Users,
+  MessageSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -22,6 +23,7 @@ export const navigation = [
   { name: "Clientes", href: "/dashboard/clients", icon: Users },
   { name: "Serviços", href: "/dashboard/services", icon: Scissors },
   { name: "Profissionais", href: "/dashboard/professionals", icon: Users },
+  { name: "WhatsApp", href: "/dashboard/whatsapp", icon: MessageSquare },
   { name: "Assinatura", href: "/dashboard/subscription", icon: CreditCard },
   { name: "Configurações", href: "/dashboard/settings", icon: Settings },
 ];

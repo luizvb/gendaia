@@ -8,7 +8,9 @@ export async function middleware(request: NextRequest) {
     request.nextUrl.pathname.startsWith("/api/test-") ||
     request.nextUrl.pathname.startsWith("/api/clear-cache") ||
     request.nextUrl.pathname.startsWith("/cache-test") ||
-    request.nextUrl.pathname.startsWith("/api/business/by-subdomain")
+    request.nextUrl.pathname.startsWith("/api/business/by-subdomain") ||
+    request.nextUrl.pathname.startsWith("/api/businesses/by-subdomain") ||
+    request.nextUrl.pathname.startsWith("/api/chat/whatsapp")
   ) {
     return NextResponse.next();
   }

@@ -16,6 +16,7 @@ export async function GET(request: NextRequest) {
     const supabase = await createClient();
 
     // Get business by subdomain
+    console.log("Subdomain:", subdomain);
     const { data: business, error } = await supabase
       .from("businesses")
       .select("*")
@@ -23,6 +24,7 @@ export async function GET(request: NextRequest) {
       .single();
 
     if (error) {
+      console.error("Error fetching business by subdomain:", error);
       if (error.code === "PGRST116") {
         return NextResponse.json(
           { error: "Business not found" },
