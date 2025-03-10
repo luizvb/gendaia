@@ -737,15 +737,7 @@ export function AppointmentModal({
                   placeholder="(00) 00000-0000"
                 />
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="client-email">Email (opcional)</Label>
-                <Input
-                  id="client-email"
-                  value={newClientEmail}
-                  onChange={(e) => setNewClientEmail(e.target.value)}
-                  placeholder="email@exemplo.com"
-                />
-              </div>
+
               <div className="flex gap-2">
                 <Button
                   variant="outline"
