@@ -934,6 +934,303 @@ export default function Home() {
               className="absolute top-1/4 right-1/4 w-64 h-64 rounded-full bg-primary/5 blur-3xl"
               animate={{
                 x: [0, 30, 0],
+                y: [0, -30, 0],
+              }}
+              transition={{
+                duration: 15,
+                repeat: Infinity,
+                repeatType: "reverse",
+              }}
+            />
+          </div>
+        </AnimatedSection>
+
+        <AnimatedSection
+          id="whatsapp-integration"
+          className="w-full bg-gradient-to-b from-white to-green-50 py-12 md:py-24 lg:py-32 relative"
+        >
+          <div className="container px-4 md:px-6">
+            <div className="grid gap-6 lg:grid-cols-2 lg:gap-12">
+              <AnimatePresence>
+                <motion.div
+                  key={selectedBusiness}
+                  initial={{ opacity: 0, x: -50 }}
+                  whileInView={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -50 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.6 }}
+                  className="flex flex-col justify-center space-y-4"
+                >
+                  <div className="space-y-2">
+                    <motion.div
+                      className="inline-flex items-center rounded-full border bg-green-100 border-green-200 px-3 py-1 text-sm"
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      whileInView={{ opacity: 1, scale: 1 }}
+                      viewport={{ once: true }}
+                      transition={{ duration: 0.3 }}
+                    >
+                      <Zap className="mr-1 h-3 w-3 text-green-600" />
+                      <span className="text-xs font-medium text-green-700">
+                        Integração Oficial
+                      </span>
+                    </motion.div>
+                    <motion.h2
+                      className="text-3xl font-bold tracking-tighter sm:text-4xl bg-clip-text text-transparent bg-gradient-to-r from-primary to-primary/70"
+                      initial={{ opacity: 0, y: 20 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      viewport={{ once: true }}
+                      transition={{ duration: 0.5, delay: 0.1 }}
+                    >
+                      WhatsApp + Inteligência Artificial
+                    </motion.h2>
+                    <motion.p
+                      className="max-w-[600px] text-muted-foreground md:text-xl"
+                      initial={{ opacity: 0, y: 20 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      viewport={{ once: true }}
+                      transition={{ duration: 0.5, delay: 0.2 }}
+                    >
+                      Conecte seu WhatsApp em segundos e deixe nossa IA
+                      gerenciar agendamentos automaticamente, mesmo quando você
+                      estiver offline
+                    </motion.p>
+                  </div>
+                  <motion.ul
+                    className="space-y-4"
+                    initial={{ opacity: 0 }}
+                    whileInView={{ opacity: 1 }}
+                    viewport={{ once: true }}
+                    transition={{ duration: 0.5, delay: 0.3 }}
+                  >
+                    {[
+                      {
+                        icon: Smartphone,
+                        title: "Ativação Simples",
+                        description:
+                          "Basta escanear um QR code do WhatsApp Web e a IA já estará ativa no seu celular em segundos",
+                      },
+                      {
+                        icon: Bot,
+                        title: "Funciona 24/7",
+                        description:
+                          "Mesmo com seu celular desligado, a IA continua respondendo e agendando para seus clientes",
+                      },
+                      {
+                        icon: MessageSquare,
+                        title: "Conversas Naturais",
+                        description:
+                          "A IA responde como um atendente real, entendendo pedidos complexos e confirmando detalhes importantes",
+                      },
+                    ].map((item, index) => (
+                      <motion.li
+                        key={index}
+                        className="flex items-start gap-3"
+                        initial={{ opacity: 0, x: 30 }}
+                        whileInView={{ opacity: 1, x: 0 }}
+                        viewport={{ once: true }}
+                        transition={{ duration: 0.5, delay: 0.3 + index * 0.1 }}
+                      >
+                        <motion.div
+                          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10"
+                          whileHover={{
+                            scale: 1.1,
+                            backgroundColor: "rgba(var(--primary), 0.2)",
+                          }}
+                        >
+                          <item.icon className="h-5 w-5 text-primary" />
+                        </motion.div>
+                        <div>
+                          <h3 className="font-medium">{item.title}</h3>
+                          <p className="text-muted-foreground">
+                            {item.description}
+                          </p>
+                        </div>
+                      </motion.li>
+                    ))}
+                  </motion.ul>
+                  <motion.div
+                    className="flex flex-col gap-2 min-[400px]:flex-row pt-4"
+                    initial={{ opacity: 0, y: 20 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ duration: 0.5, delay: 0.6 }}
+                  >
+                    <Link href="/register">
+                      <Button
+                        size="lg"
+                        className="gap-1 transition-all hover:scale-105 hover:shadow-lg bg-green-600 hover:bg-green-700 text-white"
+                      >
+                        Conectar WhatsApp
+                        <ArrowRight className="h-4 w-4" />
+                      </Button>
+                    </Link>
+                    <Link href="#demo">
+                      <Button
+                        size="lg"
+                        variant="outline"
+                        className="transition-all hover:scale-105 border-green-600 text-green-600 hover:bg-green-50"
+                      >
+                        Como funciona
+                      </Button>
+                    </Link>
+                  </motion.div>
+                </motion.div>
+              </AnimatePresence>
+
+              <motion.div
+                className="flex items-center justify-center"
+                initial={{ opacity: 0, x: 50 }}
+                whileInView={{ opacity: 1, x: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.6 }}
+              >
+                <motion.div
+                  className="relative h-[450px] w-full overflow-hidden rounded-xl bg-muted shadow-2xl"
+                  whileHover={{ scale: 1.02 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-muted" />
+                  <div className="absolute inset-0 flex flex-col items-center justify-center p-6">
+                    <motion.div
+                      className="flex h-16 w-16 items-center justify-center rounded-full bg-primary text-primary-foreground mb-4"
+                      initial={{ scale: 0 }}
+                      whileInView={{ scale: 1 }}
+                      viewport={{ once: true }}
+                      transition={{
+                        type: "spring",
+                        stiffness: 260,
+                        damping: 20,
+                        delay: 0.2,
+                      }}
+                    >
+                      <Smartphone className="h-8 w-8" />
+                    </motion.div>
+                    <motion.div
+                      className="max-w-md space-y-4 rounded-lg border bg-background p-4 shadow-lg"
+                      initial={{ opacity: 0, y: 20 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      viewport={{ once: true }}
+                      transition={{ duration: 0.5, delay: 0.3 }}
+                    >
+                      <div className="flex flex-col items-center space-y-4">
+                        <motion.div
+                          className="rounded-lg border bg-white p-4 w-64 h-64 flex items-center justify-center shadow-md"
+                          initial={{ opacity: 0, scale: 0.9 }}
+                          whileInView={{ opacity: 1, scale: 1 }}
+                          viewport={{ once: true }}
+                          transition={{ duration: 0.5, delay: 0.4 }}
+                        >
+                          <div className="relative w-full h-full">
+                            {/* QR Code Frame */}
+                            <div className="absolute inset-0 p-2">
+                              {/* QR Code Corners */}
+                              <div className="absolute top-0 left-0 w-12 h-12 flex items-center justify-center">
+                                <div className="w-10 h-10 border-4 border-green-500 rounded-tl-lg rounded-tr-none rounded-bl-none rounded-br-none"></div>
+                              </div>
+                              <div className="absolute top-0 right-0 w-12 h-12 flex items-center justify-center">
+                                <div className="w-10 h-10 border-4 border-green-500 rounded-tr-lg rounded-tl-none rounded-bl-none rounded-br-none"></div>
+                              </div>
+                              <div className="absolute bottom-0 left-0 w-12 h-12 flex items-center justify-center">
+                                <div className="w-10 h-10 border-4 border-green-500 rounded-bl-lg rounded-tr-none rounded-tl-none rounded-br-none"></div>
+                              </div>
+
+                              {/* QR Code Center */}
+                              <div className="absolute inset-0 flex items-center justify-center">
+                                <div className="w-36 h-36 grid grid-cols-7 grid-rows-7 gap-1">
+                                  {Array.from({ length: 49 }).map((_, i) => {
+                                    // Criar um padrão mais realista de QR code
+                                    const isCorner =
+                                      (i < 7 && (i < 2 || i > 4)) ||
+                                      (i > 41 && (i < 44 || i > 46)) ||
+                                      (i % 7 < 2 && (i < 14 || i > 34)) ||
+                                      (i % 7 > 4 && (i < 14 || i > 34));
+                                    const isCenter =
+                                      (i >= 21 && i <= 27) ||
+                                      i % 7 === 3 ||
+                                      Math.floor(i / 7) === 3;
+
+                                    return (
+                                      <motion.div
+                                        key={i}
+                                        className={`w-full h-full ${
+                                          isCorner
+                                            ? "bg-green-500"
+                                            : isCenter
+                                            ? "bg-green-400"
+                                            : Math.random() > 0.5
+                                            ? "bg-green-500"
+                                            : "bg-transparent"
+                                        }`}
+                                        initial={{ opacity: 0 }}
+                                        whileInView={{ opacity: 1 }}
+                                        viewport={{ once: true }}
+                                        transition={{
+                                          duration: 0.2,
+                                          delay: 0.5 + i * 0.01,
+                                          ease: "easeInOut",
+                                        }}
+                                      />
+                                    );
+                                  })}
+                                </div>
+                              </div>
+
+                              {/* WhatsApp Logo in Center */}
+                              <div className="absolute inset-0 flex items-center justify-center">
+                                <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center shadow-sm">
+                                  <div className="w-8 h-8 bg-green-500 rounded-lg flex items-center justify-center">
+                                    <div className="w-4 h-4 border-2 border-white rounded-full"></div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* WhatsApp Text */}
+                            <div className="absolute -bottom-2 inset-x-0 text-center">
+                              <p className="text-xs font-medium text-green-600">
+                                WhatsApp Web
+                              </p>
+                            </div>
+                          </div>
+                        </motion.div>
+                        <motion.div
+                          className="text-center"
+                          initial={{ opacity: 0, y: 10 }}
+                          whileInView={{ opacity: 1, y: 0 }}
+                          viewport={{ once: true }}
+                          transition={{ duration: 0.5, delay: 0.6 }}
+                        >
+                          <p className="text-sm font-medium text-green-600">
+                            Escaneie o QR code
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Use a câmera do WhatsApp para conectar sua conta
+                          </p>
+                        </motion.div>
+                        <motion.div
+                          className="flex items-center gap-2 text-green-600 text-sm"
+                          initial={{ opacity: 0, y: 10 }}
+                          whileInView={{ opacity: 1, y: 0 }}
+                          viewport={{ once: true }}
+                          transition={{ duration: 0.5, delay: 0.7 }}
+                        >
+                          <CheckCircle className="h-4 w-4" />
+                          <span>Conexão segura e criptografada</span>
+                        </motion.div>
+                      </div>
+                    </motion.div>
+                  </div>
+                </motion.div>
+              </motion.div>
+            </div>
+          </div>
+
+          {/* Background elements */}
+          <div className="absolute top-0 left-0 w-full h-full overflow-hidden -z-10">
+            <motion.div
+              className="absolute bottom-1/4 left-1/4 w-64 h-64 rounded-full bg-primary/5 blur-3xl"
+              animate={{
+                x: [0, 30, 0],
                 y: [0, 20, 0],
               }}
               transition={{
