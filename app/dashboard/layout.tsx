@@ -411,14 +411,7 @@ export default function DashboardLayout({
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem>
-                    <Link
-                      href="/dashboard/profile"
-                      className="flex w-full items-center"
-                    >
-                      Perfil
-                    </Link>
-                  </DropdownMenuItem>
+
                   <DropdownMenuItem>
                     <Link
                       href="/dashboard/settings"
