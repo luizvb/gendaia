@@ -31,6 +31,8 @@ import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { IOSPWAPrompt } from "@/components/ios-pwa-prompt";
+import { Toaster } from "sonner";
+import Image from "next/image";
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(false);
@@ -152,6 +154,10 @@ export default function DashboardLayout({
     avatar_url: string | null;
     role: string;
   } | null>(null);
+  const [businessInfo, setBusinessInfo] = useState<{
+    name: string;
+    logo: string | null;
+  } | null>(null);
 
   const { isFullscreen, toggleFullscreen } = useFullscreen();
   const { showPrompt, setShowPrompt, togglePrompt } = usePWAInstall();
@@ -180,6 +186,27 @@ export default function DashboardLayout({
 
     loadProfile();
   }, [supabase]);
+
+  useEffect(() => {
+    async function loadBusinessInfo() {
+      try {
+        const response = await fetch("/api/settings");
+        if (response.ok) {
+          const data = await response.json();
+          if (data.business) {
+            setBusinessInfo({
+              name: data.business.name || "GENDAIA",
+              logo: data.business.logo || null,
+            });
+          }
+        }
+      } catch (error) {
+        console.error("Error loading business info:", error);
+      }
+    }
+
+    loadBusinessInfo();
+  }, []);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -221,8 +248,18 @@ export default function DashboardLayout({
               <SheetContent side="left" className="w-[240px] p-0">
                 <div className="flex h-16 items-center border-b px-4">
                   <Link href="/dashboard" className="flex items-center gap-2">
+                    {businessInfo?.logo ? (
+                      <div className="h-8 w-8 relative">
+                        <Image
+                          src={businessInfo.logo}
+                          alt={businessInfo.name}
+                          fill
+                          className="object-contain h-8 w-8"
+                        />
+                      </div>
+                    ) : null}
                     <span className="text-xl font-semibold tracking-tight">
-                      GENDAIA
+                      {businessInfo?.name || "GENDAIA"}
                     </span>
                   </Link>
                 </div>
@@ -429,6 +466,7 @@ export default function DashboardLayout({
         forceShow={showPrompt}
         onClose={() => setShowPrompt(false)}
       />
+      <Toaster position="top-right" />
     </div>
   );
 }

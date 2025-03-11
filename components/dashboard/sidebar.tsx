@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import Image from "next/image";
 
 export const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -35,6 +36,31 @@ interface SidebarProps {
 export function Sidebar({ className }: SidebarProps) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
+  const [businessInfo, setBusinessInfo] = useState<{
+    name: string;
+    logo: string | null;
+  } | null>(null);
+
+  useEffect(() => {
+    async function loadBusinessInfo() {
+      try {
+        const response = await fetch("/api/settings");
+        if (response.ok) {
+          const data = await response.json();
+          if (data.business) {
+            setBusinessInfo({
+              name: data.business.name || "GENDAIA",
+              logo: data.business.logo || null,
+            });
+          }
+        }
+      } catch (error) {
+        console.error("Error loading business info:", error);
+      }
+    }
+
+    loadBusinessInfo();
+  }, []);
 
   return (
     <div
@@ -51,11 +77,42 @@ export function Sidebar({ className }: SidebarProps) {
             collapsed ? "justify-center" : "justify-between"
           )}
         >
-          {!collapsed && (
+          {!collapsed ? (
             <Link href="/dashboard" className="flex items-center gap-2">
+              {businessInfo?.logo ? (
+                <div className="h-8 w-8 relative">
+                  <Image
+                    src={businessInfo.logo}
+                    alt={businessInfo.name}
+                    fill
+                    className="object-contain"
+                  />
+                </div>
+              ) : null}
               <span className="text-xl font-semibold tracking-tight">
-                GENDAIA
+                {businessInfo?.name || "GENDAIA"}
               </span>
+            </Link>
+          ) : businessInfo?.logo ? (
+            <Link
+              href="/dashboard"
+              className="flex items-center justify-center"
+            >
+              <div className="h-8 w-8 relative">
+                <Image
+                  src={businessInfo.logo}
+                  alt={businessInfo.name || "GENDAIA"}
+                  fill
+                  className="object-contain"
+                />
+              </div>
+            </Link>
+          ) : (
+            <Link
+              href="/dashboard"
+              className="flex items-center justify-center"
+            >
+              <span className="text-xl font-semibold tracking-tight">G</span>
             </Link>
           )}
           <Button
