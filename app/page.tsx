@@ -907,7 +907,7 @@ export default function Home() {
                     <Link href="/register">
                       <Button
                         size="lg"
-                        className="gap-1 transition-all hover:scale-105 hover:shadow-lg"
+                        className="gap-1 transition-all hover:scale-105 hover:shadow-lg bg-green-600 hover:bg-green-700 text-white"
                       >
                         Ativar Agente IA
                         <ArrowRight className="h-4 w-4" />
@@ -917,7 +917,7 @@ export default function Home() {
                       <Button
                         size="lg"
                         variant="outline"
-                        className="transition-all hover:scale-105"
+                        className="transition-all hover:scale-105 border-green-600 text-green-600 hover:bg-green-50 dark:hover:bg-green-950/20"
                       >
                         Ver demonstração
                       </Button>
@@ -947,7 +947,7 @@ export default function Home() {
 
         <AnimatedSection
           id="whatsapp-integration"
-          className="w-full bg-gradient-to-b from-white to-green-50 py-12 md:py-24 lg:py-32 relative"
+          className="w-full bg-gradient-to-b from-background to-background/80 py-12 md:py-24 lg:py-32 relative"
         >
           <div className="container px-4 md:px-6">
             <div className="grid gap-6 lg:grid-cols-2 lg:gap-12">
@@ -963,14 +963,14 @@ export default function Home() {
                 >
                   <div className="space-y-2">
                     <motion.div
-                      className="inline-flex items-center rounded-full border bg-green-100 border-green-200 px-3 py-1 text-sm"
+                      className="inline-flex items-center rounded-full border bg-primary/10 px-3 py-1 text-sm"
                       initial={{ opacity: 0, scale: 0.8 }}
                       whileInView={{ opacity: 1, scale: 1 }}
                       viewport={{ once: true }}
                       transition={{ duration: 0.3 }}
                     >
-                      <Zap className="mr-1 h-3 w-3 text-green-600" />
-                      <span className="text-xs font-medium text-green-700">
+                      <Zap className="mr-1 h-3 w-3 text-primary" />
+                      <span className="text-xs font-medium">
                         Integração Oficial
                       </span>
                     </motion.div>
@@ -1068,7 +1068,7 @@ export default function Home() {
                       <Button
                         size="lg"
                         variant="outline"
-                        className="transition-all hover:scale-105 border-green-600 text-green-600 hover:bg-green-50"
+                        className="transition-all hover:scale-105 border-green-600 text-green-600 hover:bg-green-50 dark:hover:bg-green-950/20"
                       >
                         Como funciona
                       </Button>
@@ -1114,7 +1114,7 @@ export default function Home() {
                     >
                       <div className="flex flex-col items-center space-y-4">
                         <motion.div
-                          className="rounded-lg border bg-white p-4 w-64 h-64 flex items-center justify-center shadow-md"
+                          className="rounded-lg border bg-card p-4 w-64 h-64 flex items-center justify-center shadow-md"
                           initial={{ opacity: 0, scale: 0.9 }}
                           whileInView={{ opacity: 1, scale: 1 }}
                           viewport={{ once: true }}
@@ -1177,9 +1177,9 @@ export default function Home() {
 
                               {/* WhatsApp Logo in Center */}
                               <div className="absolute inset-0 flex items-center justify-center">
-                                <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center shadow-sm">
+                                <div className="w-10 h-10 bg-background rounded-lg flex items-center justify-center shadow-sm">
                                   <div className="w-8 h-8 bg-green-500 rounded-lg flex items-center justify-center">
-                                    <div className="w-4 h-4 border-2 border-white rounded-full"></div>
+                                    <div className="w-4 h-4 border-2 border-background rounded-full"></div>
                                   </div>
                                 </div>
                               </div>
@@ -1187,7 +1187,7 @@ export default function Home() {
 
                             {/* WhatsApp Text */}
                             <div className="absolute -bottom-2 inset-x-0 text-center">
-                              <p className="text-xs font-medium text-green-600">
+                              <p className="text-xs font-medium text-green-600 dark:text-green-400">
                                 WhatsApp Web
                               </p>
                             </div>
@@ -1200,7 +1200,7 @@ export default function Home() {
                           viewport={{ once: true }}
                           transition={{ duration: 0.5, delay: 0.6 }}
                         >
-                          <p className="text-sm font-medium text-green-600">
+                          <p className="text-sm font-medium text-green-600 dark:text-green-400">
                             Escaneie o QR code
                           </p>
                           <p className="text-xs text-muted-foreground mt-1">
@@ -1208,14 +1208,16 @@ export default function Home() {
                           </p>
                         </motion.div>
                         <motion.div
-                          className="flex items-center gap-2 text-green-600 text-sm"
+                          className="flex items-center gap-2 text-green-600 dark:text-green-400"
                           initial={{ opacity: 0, y: 10 }}
                           whileInView={{ opacity: 1, y: 0 }}
                           viewport={{ once: true }}
                           transition={{ duration: 0.5, delay: 0.7 }}
                         >
                           <CheckCircle className="h-4 w-4" />
-                          <span>Conexão segura e criptografada</span>
+                          <span className="text-sm">
+                            Conexão segura e criptografada
+                          </span>
                         </motion.div>
                       </div>
                     </motion.div>
