@@ -104,7 +104,11 @@ export async function middleware(request: NextRequest) {
     }
 
     // Redireciona usuários autenticados para fora das páginas públicas
-    if (isPublicRoute && !isOnboardingRoute) {
+    if (
+      isPublicRoute &&
+      !isOnboardingRoute &&
+      !request.nextUrl.pathname.startsWith("/booking")
+    ) {
       const url = request.nextUrl.clone();
       url.pathname = "/dashboard";
       return NextResponse.redirect(url);

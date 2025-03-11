@@ -128,18 +128,52 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
 
     // Validate required fields
-    const requiredFields = [
-      "start_time",
-      "professional_id",
-      "service_id",
-      "client_id",
-    ];
+    const requiredFields = ["start_time", "professional_id", "service_id"];
     for (const field of requiredFields) {
       if (!body[field]) {
         return NextResponse.json(
           { error: `Missing required field: ${field}` },
           { status: 400 }
         );
+      }
+    }
+
+    // Buscar ou criar cliente
+    let clientId = body.client_id;
+    if (!clientId) {
+      // Primeiro tenta buscar o cliente pelo telefone
+      const { data: existingClient } = await supabase
+        .from("clients")
+        .select("id")
+        .eq("phone", body.client_phone)
+        .eq("business_id", businessId)
+        .single();
+
+      if (existingClient) {
+        clientId = existingClient.id;
+      } else {
+        // Se não encontrar, cria um novo cliente
+        const { data: newClient, error: clientError } = await supabase
+          .from("clients")
+          .insert([
+            {
+              name: body.client_name,
+              phone: body.client_phone,
+              business_id: businessId,
+            },
+          ])
+          .select()
+          .single();
+
+        if (clientError) {
+          console.error("Error creating client:", clientError);
+          return NextResponse.json(
+            { error: "Failed to create client" },
+            { status: 500 }
+          );
+        }
+
+        clientId = newClient.id;
       }
     }
 
@@ -155,7 +189,7 @@ export async function POST(request: NextRequest) {
     }
 
     const startTime = new Date(body.start_time);
-    const endTime = new Date(startTime.getTime() + service.duration * 60000); // duration is in minutes
+    const endTime = new Date(startTime.getTime() + service.duration * 60000);
 
     // Create appointment
     const { data, error } = await supabase
@@ -166,7 +200,7 @@ export async function POST(request: NextRequest) {
           end_time: endTime.toISOString(),
           professional_id: body.professional_id,
           service_id: body.service_id,
-          client_id: body.client_id,
+          client_id: clientId,
           business_id: businessId,
           status: "scheduled",
           notes: body.notes || "",
