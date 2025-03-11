@@ -1,6 +1,9 @@
-import { NextResponse } from "next/server";
+import { NextResponse, NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { addMinutes, format, parse, setHours, setMinutes } from "date-fns";
+
+// Mark this route as dynamic to avoid static generation errors
+export const dynamic = "force-dynamic";
 
 // Horário de funcionamento
 const BUSINESS_HOURS = {
@@ -14,9 +17,9 @@ interface Appointment {
   end_time: string;
 }
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
+    const { searchParams } = request.nextUrl;
     const professionalId = searchParams.get("professional_id");
     const date = searchParams.get("date");
     const serviceDuration = parseInt(

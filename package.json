@@ -6,9 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
-    "postinstall": "node node_modules/puppeteer/install.mjs",
-    "check-puppeteer": "node check-puppeteer.js"
+    "lint": "next lint"
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.758.0",
