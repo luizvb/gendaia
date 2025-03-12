@@ -233,10 +233,10 @@ export default function DashboardLayout({
   };
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex h-[100dvh] overflow-hidden">
       <Sidebar className="z-30" />
-      <div className="flex-1 flex flex-col min-w-0">
-        <header className="sticky top-0 z-20 flex h-16 items-center border-b bg-background/80 px-4 backdrop-blur md:px-6">
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center border-b bg-background/80 px-4 backdrop-blur md:px-6">
           <div className="flex w-full items-center justify-between lg:justify-end gap-2">
             <Sheet>
               <SheetTrigger asChild>
@@ -435,11 +435,11 @@ export default function DashboardLayout({
         <div className={cn("flex flex-1 relative overflow-hidden")}>
           <main
             className={cn(
-              "flex-1 p-4 md:p-6 min-w-0 transition-all duration-300 overflow-y-auto",
+              "flex-1 min-w-0 transition-all duration-300 overflow-y-auto",
               isDrawerOpen ? "mr-[400px] lg:mr-[400px] md:mr-0" : "mr-0"
             )}
           >
-            {children}
+            <div className="p-4 md:p-6">{children}</div>
           </main>
           <div
             className={cn(
@@ -447,7 +447,7 @@ export default function DashboardLayout({
               "transition-transform duration-300 shadow-lg",
               "md:w-[400px] md:h-[calc(100vh-4rem)]",
               "w-full h-[calc(100vh-9rem)]",
-              "flex flex-col",
+              "flex flex-col overflow-hidden",
               isDrawerOpen ? "translate-x-0" : "translate-x-full"
             )}
           >
