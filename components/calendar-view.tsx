@@ -307,8 +307,8 @@ export function CalendarView() {
   );
 
   const weekDays = useMemo(() => {
-    const weekStart = startOfWeek(currentDate, { locale: ptBR });
-    return Array.from({ length: 7 }).map((_, i) => addDays(weekStart, i));
+    // Start from today instead of week's start
+    return Array.from({ length: 7 }).map((_, i) => addDays(currentDate, i));
   }, [currentDate]); // Só recalcula quando currentDate muda
 
   const daysToShow = useMemo(

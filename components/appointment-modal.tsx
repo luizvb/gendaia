@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -888,18 +887,13 @@ export function AppointmentModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[500px] backdrop-blur-xl bg-background/80 border border-border/50">
+      <DialogContent className="sm:max-w-[500px] backdrop-blur-xl bg-background/80 border border-border/50 max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {isEditMode ? "Editar Agendamento" : "Novo Agendamento"}
           </DialogTitle>
-          <DialogDescription>
-            {isEditMode
-              ? "Edite os dados do agendamento existente."
-              : "Preencha os dados para agendar um novo atendimento."}
-          </DialogDescription>
         </DialogHeader>
-        <div className="grid gap-4 py-4">
+        <div className="grid gap-3 py-3">
           <div className="grid gap-2">
             <Label htmlFor="professional">Profissional</Label>
             <Select
