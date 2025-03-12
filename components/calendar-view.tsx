@@ -86,17 +86,16 @@ export function CalendarView() {
     null
   );
   const [showCopyToast, setShowCopyToast] = useState(false);
+  const [professionalsAvailability, setProfessionalsAvailability] = useState<{
+    [professionalId: string]: {
+      [date: string]: string[];
+    };
+  }>({});
 
   const calendarContainerRef = useRef<HTMLDivElement>(null);
 
-  // Buscar clientes quando o termo de busca mudar
-  useEffect(() => {
-    if (clientSearchTerm.length >= 2) {
-      fetchClients(clientSearchTerm);
-    }
-  }, [clientSearchTerm]);
-
-  const fetchProfessionals = async () => {
+  // Wrap fetch functions in useCallback to prevent recreation on every render
+  const fetchProfessionals = useCallback(async () => {
     try {
       const response = await fetch("/api/professionals");
       if (!response.ok) throw new Error("Falha ao carregar profissionais");
@@ -106,9 +105,9 @@ export function CalendarView() {
       console.error("Erro ao carregar profissionais:", error);
       toast.error("Não foi possível carregar os profissionais");
     }
-  };
+  }, []);
 
-  const fetchServices = async () => {
+  const fetchServices = useCallback(async () => {
     try {
       const response = await fetch("/api/services");
       if (!response.ok) throw new Error("Falha ao carregar serviços");
@@ -118,9 +117,9 @@ export function CalendarView() {
       console.error("Erro ao carregar serviços:", error);
       toast.error("Não foi possível carregar os serviços");
     }
-  };
+  }, []);
 
-  const fetchClients = async (searchTerm = "") => {
+  const fetchClients = useCallback(async (searchTerm = "") => {
     try {
       const url = searchTerm
         ? `/api/clients?name=${encodeURIComponent(searchTerm)}`
@@ -134,9 +133,16 @@ export function CalendarView() {
       console.error("Erro ao carregar clientes:", error);
       toast.error("Não foi possível carregar os clientes");
     }
-  };
+  }, []);
 
-  const fetchAppointments = async () => {
+  // Buscar clientes quando o termo de busca mudar
+  useEffect(() => {
+    if (clientSearchTerm.length >= 2) {
+      fetchClients(clientSearchTerm);
+    }
+  }, [clientSearchTerm, fetchClients]);
+
+  const fetchAppointments = useCallback(async () => {
     try {
       const startDate =
         view === "day"
@@ -164,13 +170,71 @@ export function CalendarView() {
       console.error("Erro ao carregar agendamentos:", error);
       toast.error("Não foi possível carregar os agendamentos");
     }
-  };
+  }, [currentDate, view]);
+
+  // New function to fetch availability for all professionals
+  const fetchAllAvailability = useCallback(async () => {
+    try {
+      const response = await fetch("/api/availability?fetch_all=true");
+      if (!response.ok) throw new Error("Falha ao carregar disponibilidades");
+      const data = await response.json();
+
+      // Transform the data into a more convenient format for lookup
+      const availabilityMap: {
+        [professionalId: string]: {
+          [date: string]: string[];
+        };
+      } = {};
+
+      data.professionals_availability.forEach((prof: any) => {
+        availabilityMap[prof.id] = prof.availability;
+      });
+
+      setProfessionalsAvailability(availabilityMap);
+    } catch (error) {
+      console.error("Erro ao carregar disponibilidades:", error);
+      toast.error("Não foi possível carregar as disponibilidades");
+    }
+  }, []);
 
   // Função para criar um novo cliente
-  const handleClientCreated = (newClient: Client) => {
-    setClients((prevClients) => [...prevClients, newClient]);
-    fetchAppointments();
-  };
+  const handleClientCreated = useCallback(
+    (newClient: Client) => {
+      setClients((prevClients) => [...prevClients, newClient]);
+      // Call fetchAppointments directly instead of using the callback
+      // to avoid potential circular dependencies
+      (async () => {
+        try {
+          const startDate =
+            view === "day"
+              ? format(currentDate, "yyyy-MM-dd")
+              : format(
+                  startOfWeek(currentDate, { locale: ptBR }),
+                  "yyyy-MM-dd"
+                );
+
+          const endDate =
+            view === "day"
+              ? format(addDays(currentDate, 1), "yyyy-MM-dd")
+              : format(
+                  addDays(startOfWeek(currentDate, { locale: ptBR }), 7),
+                  "yyyy-MM-dd"
+                );
+
+          const response = await fetch(
+            `/api/appointments?start_date=${startDate}&end_date=${endDate}`
+          );
+          if (!response.ok) throw new Error("Falha ao carregar agendamentos");
+          const data = await response.json();
+          setAppointments(data);
+        } catch (error) {
+          console.error("Erro ao carregar agendamentos:", error);
+          toast.error("Não foi possível carregar os agendamentos");
+        }
+      })();
+    },
+    [currentDate, view]
+  );
 
   const weekDays = useMemo(() => {
     const weekStart = startOfWeek(currentDate, { locale: ptBR });
@@ -216,6 +280,7 @@ export function CalendarView() {
           fetchServices(),
           fetchAppointments(),
           fetchClients(),
+          fetchAllAvailability(),
         ]);
       } finally {
         setIsLoading(false);
@@ -223,7 +288,15 @@ export function CalendarView() {
     };
 
     fetchData();
-  }, [currentDateTimestamp, view]); // Usar timestamp para evitar chamadas desnecessárias
+  }, [
+    currentDateTimestamp,
+    view,
+    fetchProfessionals,
+    fetchServices,
+    fetchAppointments,
+    fetchClients,
+    fetchAllAvailability,
+  ]);
 
   useEffect(() => {
     // Lidar com resize e atualizar visibleDays conforme necessário
@@ -765,6 +838,7 @@ export function CalendarView() {
         onClientCreated={handleClientCreated}
         onAppointmentCreated={fetchAppointments}
         onAppointmentUpdated={fetchAppointments}
+        professionalsAvailability={professionalsAvailability}
       />
 
       {showCopyToast && (

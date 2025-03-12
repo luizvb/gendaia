@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { format, parseISO } from "date-fns";
 import { PlusCircle, Search } from "lucide-react";
 import { toast } from "sonner";
@@ -91,6 +91,11 @@ interface AppointmentModalProps {
   onClientCreated?: (client: Client) => void;
   onAppointmentCreated?: () => void;
   onAppointmentUpdated?: () => void;
+  professionalsAvailability?: {
+    [professionalId: string]: {
+      [date: string]: string[];
+    };
+  };
 }
 
 export function AppointmentModal({
@@ -105,6 +110,7 @@ export function AppointmentModal({
   onClientCreated,
   onAppointmentCreated,
   onAppointmentUpdated,
+  professionalsAvailability = {},
 }: AppointmentModalProps) {
   const [date, setDate] = useState<Date | undefined>(
     selectedSlot ? selectedSlot.date : new Date()
@@ -187,21 +193,102 @@ export function AppointmentModal({
     }
   }, [selectedSlot, selectedAppointment, services]);
 
-  // Select first service when services are loaded and no service is selected
-  useEffect(() => {
-    if (services.length > 0 && !serviceId && !isEditMode) {
-      setServiceId(services[0].id);
-    }
-  }, [services, serviceId, isEditMode]);
+  // Define fetchAvailableTimeSlots with useCallback
+  const fetchAvailableTimeSlots = useCallback(async () => {
+    if (!date || !professionalId || !serviceId) return;
 
-  // Verificar disponibilidade quando mudar o profissional
-  useEffect(() => {
-    if (professionalId && date && serviceId) {
-      checkAvailability();
-    }
-  }, [professionalId]);
+    try {
+      setIsLoadingTimeSlots(true);
+      const selectedService = services.find((s) => s.id === serviceId);
+      if (!selectedService) return;
 
-  const checkAvailability = async () => {
+      const formattedDate = format(date, "yyyy-MM-dd");
+
+      // Check if we have pre-fetched availability data
+      if (
+        professionalsAvailability &&
+        Object.keys(professionalsAvailability).length > 0
+      ) {
+        const availableSlots =
+          professionalsAvailability[professionalId]?.[formattedDate] || [];
+        setTimeSlots(availableSlots);
+
+        // If in edit mode, check if the current time is still available
+        if (isEditMode && time && !availableSlots.includes(time)) {
+          // Keep the current time in edit mode even if not in available slots
+          // This is because the current appointment is occupying this slot
+          if (selectedAppointment) {
+            const appointmentTime = format(
+              new Date(selectedAppointment.start_time),
+              "HH:mm"
+            );
+            if (appointmentTime === time) {
+              // This is the current appointment's time, so it's valid
+            } else {
+              setTime("");
+              toast.error("O horário selecionado não está mais disponível");
+            }
+          } else {
+            setTime("");
+            toast.error("O horário selecionado não está mais disponível");
+          }
+        }
+
+        setIsLoadingTimeSlots(false);
+        return;
+      }
+
+      // Fall back to API call if pre-fetched data is not available
+      const response = await fetch(
+        `/api/availability?professional_id=${professionalId}&date=${formattedDate}&service_duration=${selectedService.duration}`
+      );
+
+      if (!response.ok) {
+        throw new Error("Falha ao buscar horários disponíveis");
+      }
+
+      const data = await response.json();
+      setTimeSlots(data.available_slots);
+
+      // Se estiver em modo de edição, manter o horário atual se ainda estiver disponível
+      if (isEditMode && time && !data.available_slots.includes(time)) {
+        // In edit mode, we need to check if this is the current appointment's time
+        if (selectedAppointment) {
+          const appointmentTime = format(
+            new Date(selectedAppointment.start_time),
+            "HH:mm"
+          );
+          if (appointmentTime === time) {
+            // This is the current appointment's time, so it's valid
+          } else {
+            setTime("");
+            toast.error("O horário selecionado não está mais disponível");
+          }
+        } else {
+          setTime("");
+          toast.error("O horário selecionado não está mais disponível");
+        }
+      }
+    } catch (error) {
+      console.error("Erro ao buscar horários disponíveis:", error);
+      toast.error("Não foi possível carregar os horários disponíveis");
+      setTimeSlots([]);
+    } finally {
+      setIsLoadingTimeSlots(false);
+    }
+  }, [
+    date,
+    professionalId,
+    serviceId,
+    services,
+    isEditMode,
+    time,
+    selectedAppointment,
+    professionalsAvailability,
+  ]);
+
+  // Define checkAvailability with useCallback
+  const checkAvailability = useCallback(async () => {
     if (!date || !professionalId || !serviceId) return;
 
     try {
@@ -209,29 +296,102 @@ export function AppointmentModal({
       if (!selectedService) return;
 
       const formattedDate = format(date, "yyyy-MM-dd");
-      const response = await fetch(
-        `/api/availability?professional_id=${professionalId}&date=${formattedDate}&service_duration=${selectedService.duration}`
-      );
 
-      if (!response.ok) {
-        throw new Error("Falha ao verificar disponibilidade");
-      }
+      // Check if we have pre-fetched availability data
+      if (
+        professionalsAvailability &&
+        Object.keys(professionalsAvailability).length > 0
+      ) {
+        const availableSlots =
+          professionalsAvailability[professionalId]?.[formattedDate] || [];
+        const timeStr =
+          time || format(selectedSlot?.date || new Date(), "HH:mm");
 
-      const data = await response.json();
-      const timeStr = time || format(selectedSlot?.date || new Date(), "HH:mm");
-
-      // Se o horário atual não estiver disponível, limpar a seleção
-      if (!data.available_slots.includes(timeStr)) {
-        setTime("");
-        toast.error(
-          "O horário selecionado não está mais disponível com este profissional"
+        // If the current time is not available, clear the selection
+        if (!availableSlots.includes(timeStr)) {
+          // In edit mode, check if this is the current appointment's time
+          if (isEditMode && selectedAppointment) {
+            const appointmentTime = format(
+              new Date(selectedAppointment.start_time),
+              "HH:mm"
+            );
+            if (appointmentTime !== timeStr) {
+              setTime("");
+              toast.error(
+                "O horário selecionado não está mais disponível com este profissional"
+              );
+            }
+          } else {
+            setTime("");
+            toast.error(
+              "O horário selecionado não está mais disponível com este profissional"
+            );
+          }
+        }
+      } else {
+        // Fall back to API call if pre-fetched data is not available
+        const response = await fetch(
+          `/api/availability?professional_id=${professionalId}&date=${formattedDate}&service_duration=${selectedService.duration}`
         );
+
+        if (!response.ok) {
+          throw new Error("Falha ao verificar disponibilidade");
+        }
+
+        const data = await response.json();
+        const timeStr =
+          time || format(selectedSlot?.date || new Date(), "HH:mm");
+
+        // Se o horário atual não estiver disponível, limpar a seleção
+        if (!data.available_slots.includes(timeStr)) {
+          setTime("");
+          toast.error(
+            "O horário selecionado não está mais disponível com este profissional"
+          );
+        }
       }
     } catch (error) {
       console.error("Erro ao verificar disponibilidade:", error);
       toast.error("Não foi possível verificar a disponibilidade do horário");
     }
-  };
+  }, [
+    date,
+    professionalId,
+    serviceId,
+    services,
+    time,
+    selectedSlot,
+    isEditMode,
+    selectedAppointment,
+    professionalsAvailability,
+  ]);
+
+  // Select first service when services are loaded and no service is selected
+  useEffect(() => {
+    if (services.length > 0 && !serviceId && !isEditMode) {
+      setServiceId(services[0].id);
+    }
+  }, [services, serviceId, isEditMode]);
+
+  // Update the useEffect that fetches available time slots when service changes
+  useEffect(() => {
+    if (serviceId && professionalId && date) {
+      // When service changes, we need to recalculate availability based on the new duration
+      const selectedService = services.find((s) => s.id === serviceId);
+      if (selectedService) {
+        // If we're using pre-fetched data, we need to refetch with the new duration
+        // This is because the pre-fetched data is based on a default duration
+        fetchAvailableTimeSlots();
+      }
+    }
+  }, [serviceId, professionalId, date, services, fetchAvailableTimeSlots]);
+
+  // Verificar disponibilidade quando mudar o profissional
+  useEffect(() => {
+    if (professionalId && date && serviceId) {
+      checkAvailability();
+    }
+  }, [professionalId, date, serviceId, checkAvailability]);
 
   const handleClientSelect = (client: Client) => {
     setClientName(client.name);
@@ -301,27 +461,68 @@ export function AppointmentModal({
       // Verificar disponibilidade antes de criar/atualizar
       console.log("Verificando disponibilidade...");
       const formattedDate = format(startTime, "yyyy-MM-dd");
-      const availabilityResponse = await fetch(
-        `/api/availability?professional_id=${professionalId}&date=${formattedDate}&service_duration=${selectedService.duration}`
-      );
+      const timeStr = format(startTime, "HH:mm");
 
-      if (!availabilityResponse.ok) {
-        console.log(
-          "Erro ao verificar disponibilidade:",
-          await availabilityResponse.text()
+      // Check if we have pre-fetched availability data
+      let isAvailable = false;
+
+      if (
+        professionalsAvailability &&
+        Object.keys(professionalsAvailability).length > 0
+      ) {
+        const availableSlots =
+          professionalsAvailability[professionalId]?.[formattedDate] || [];
+        console.log("Disponibilidade verificada (cache):", {
+          availableSlots,
+          requestedTime: timeStr,
+        });
+
+        // Se for edição, permitir o mesmo horário
+        if (isEditMode && selectedAppointment) {
+          const appointmentTime = format(
+            new Date(selectedAppointment.start_time),
+            "HH:mm"
+          );
+          isAvailable =
+            availableSlots.includes(timeStr) || appointmentTime === timeStr;
+        } else {
+          isAvailable = availableSlots.includes(timeStr);
+        }
+      } else {
+        // Fall back to API call
+        const availabilityResponse = await fetch(
+          `/api/availability?professional_id=${professionalId}&date=${formattedDate}&service_duration=${selectedService.duration}`
         );
-        throw new Error("Falha ao verificar disponibilidade");
+
+        if (!availabilityResponse.ok) {
+          console.log(
+            "Erro ao verificar disponibilidade:",
+            await availabilityResponse.text()
+          );
+          throw new Error("Falha ao verificar disponibilidade");
+        }
+
+        const availabilityData = await availabilityResponse.json();
+        console.log("Disponibilidade verificada (API):", {
+          availableSlots: availabilityData.available_slots,
+          requestedTime: timeStr,
+        });
+
+        // Se for edição, permitir o mesmo horário
+        if (isEditMode && selectedAppointment) {
+          const appointmentTime = format(
+            new Date(selectedAppointment.start_time),
+            "HH:mm"
+          );
+          isAvailable =
+            availabilityData.available_slots.includes(timeStr) ||
+            appointmentTime === timeStr;
+        } else {
+          isAvailable = availabilityData.available_slots.includes(timeStr);
+        }
       }
 
-      const availabilityData = await availabilityResponse.json();
-      const timeStr = format(startTime, "HH:mm");
-      console.log("Disponibilidade verificada:", {
-        availableSlots: availabilityData.available_slots,
-        requestedTime: timeStr,
-      });
-
-      // Se for edição, permitir o mesmo horário
-      if (!isEditMode && !availabilityData.available_slots.includes(timeStr)) {
+      if (!isAvailable && !isEditMode) {
         console.log("Horário não disponível");
         toast.error("Este horário não está mais disponível");
         return;
@@ -517,49 +718,6 @@ export function AppointmentModal({
 
   const [timeSlots, setTimeSlots] = useState<string[]>([]);
   const [isLoadingTimeSlots, setIsLoadingTimeSlots] = useState(false);
-
-  // Buscar horários disponíveis quando mudar profissional, serviço ou data
-  useEffect(() => {
-    if (professionalId && date && serviceId) {
-      fetchAvailableTimeSlots();
-    } else {
-      setTimeSlots([]);
-    }
-  }, [professionalId, date, serviceId]);
-
-  const fetchAvailableTimeSlots = async () => {
-    if (!date || !professionalId || !serviceId) return;
-
-    try {
-      setIsLoadingTimeSlots(true);
-      const selectedService = services.find((s) => s.id === serviceId);
-      if (!selectedService) return;
-
-      const formattedDate = format(date, "yyyy-MM-dd");
-      const response = await fetch(
-        `/api/availability?professional_id=${professionalId}&date=${formattedDate}&service_duration=${selectedService.duration}`
-      );
-
-      if (!response.ok) {
-        throw new Error("Falha ao buscar horários disponíveis");
-      }
-
-      const data = await response.json();
-      setTimeSlots(data.available_slots);
-
-      // Se estiver em modo de edição, manter o horário atual se ainda estiver disponível
-      if (isEditMode && time && !data.available_slots.includes(time)) {
-        setTime("");
-        toast.error("O horário selecionado não está mais disponível");
-      }
-    } catch (error) {
-      console.error("Erro ao buscar horários disponíveis:", error);
-      toast.error("Não foi possível carregar os horários disponíveis");
-      setTimeSlots([]);
-    } finally {
-      setIsLoadingTimeSlots(false);
-    }
-  };
 
   // Filtrar clientes com base no termo de busca local
   const filteredClients = useMemo(() => {
