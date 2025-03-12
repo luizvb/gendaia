@@ -91,6 +91,13 @@ export function CalendarView() {
       [date: string]: string[];
     };
   }>({});
+  const [businessHours, setBusinessHours] = useState<{
+    [dayOfWeek: number]: {
+      is_open: boolean;
+      open_time: string;
+      close_time: string;
+    };
+  }>({});
 
   const calendarContainerRef = useRef<HTMLDivElement>(null);
 
@@ -197,6 +204,69 @@ export function CalendarView() {
     }
   }, []);
 
+  // Fetch business hours
+  const fetchBusinessHours = useCallback(async () => {
+    try {
+      const response = await fetch("/api/settings");
+      if (!response.ok)
+        throw new Error("Falha ao carregar horários de funcionamento");
+      const data = await response.json();
+
+      // Transform the data into a more convenient format for lookup
+      const hoursMap: {
+        [dayOfWeek: number]: {
+          is_open: boolean;
+          open_time: string;
+          close_time: string;
+        };
+      } = {};
+
+      if (data.businessHours && Array.isArray(data.businessHours)) {
+        data.businessHours.forEach((hour: any) => {
+          hoursMap[hour.day_of_week] = {
+            is_open: hour.is_open,
+            open_time: hour.open_time,
+            close_time: hour.close_time,
+          };
+        });
+      }
+
+      setBusinessHours(hoursMap);
+
+      // Also set business subdomain if available
+      if (data.business && data.business.subdomain) {
+        setBusinessSubdomain(data.business.subdomain);
+      } else if (data.business && data.business.name) {
+        // Generate subdomain from name if not set
+        const subdomain = `${data.business.name
+          .toLowerCase()
+          .replace(/\s+/g, "-")}.gendaia.com.br`;
+        setBusinessSubdomain(subdomain);
+      }
+    } catch (error) {
+      console.error("Erro ao carregar horários de funcionamento:", error);
+      toast.error("Não foi possível carregar os horários de funcionamento");
+    }
+  }, []);
+
+  // Função para atualizar agendamentos e disponibilidades
+  const refreshAppointmentsAndAvailability = useCallback(async () => {
+    try {
+      // Mostrar loading state
+      setIsLoading(true);
+
+      // Executar ambas as chamadas em paralelo
+      await Promise.all([fetchAppointments(), fetchAllAvailability()]);
+
+      console.log("Agendamentos e disponibilidades atualizados com sucesso");
+    } catch (error) {
+      console.error("Erro ao atualizar dados:", error);
+      toast.error("Não foi possível atualizar os dados");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [fetchAppointments, fetchAllAvailability]);
+
   // Função para criar um novo cliente
   const handleClientCreated = useCallback(
     (newClient: Client) => {
@@ -246,24 +316,119 @@ export function CalendarView() {
     [view, weekDays, currentDate]
   );
 
-  // Gerar os horários do dia (agora em intervalos de 30 minutos)
-  const dayHours = useMemo(() => {
-    const slots = [];
-    for (let hour = 9; hour < 19; hour++) {
-      for (let minutes = 0; minutes < 60; minutes += 30) {
-        slots.push(
-          new Date(
-            currentDate.getFullYear(),
-            currentDate.getMonth(),
-            currentDate.getDate(),
-            hour,
-            minutes
-          )
-        );
+  // Function to check if a day is open based on business hours
+  const isDayOpen = useCallback(
+    (date: Date) => {
+      const dayOfWeek = date.getDay(); // 0 = Sunday, 1 = Monday, etc.
+
+      // If we don't have business hours for this day, assume it's open
+      if (!businessHours[dayOfWeek]) return true;
+
+      return businessHours[dayOfWeek].is_open;
+    },
+    [businessHours]
+  );
+
+  // Function to get business hours for a specific day
+  const getBusinessHoursForDay = useCallback(
+    (date: Date) => {
+      const dayOfWeek = date.getDay();
+
+      // If we don't have business hours for this day, use default hours
+      if (!businessHours[dayOfWeek]) {
+        return {
+          open_time: "09:00",
+          close_time: "19:00",
+        };
       }
-    }
+
+      return {
+        open_time: businessHours[dayOfWeek].open_time || "09:00",
+        close_time: businessHours[dayOfWeek].close_time || "19:00",
+      };
+    },
+    [businessHours]
+  );
+
+  // Function to check if a specific time slot is within business hours
+  const isTimeSlotWithinBusinessHours = useCallback(
+    (date: Date) => {
+      const dayOfWeek = date.getDay();
+
+      // If the day is closed, the time slot is not within business hours
+      if (!isDayOpen(date)) return false;
+
+      // Get business hours for this day
+      const { open_time, close_time } = getBusinessHoursForDay(date);
+
+      // Parse open and close times
+      const [openHour, openMinute] = open_time.split(":").map(Number);
+      const [closeHour, closeMinute] = close_time.split(":").map(Number);
+
+      // Convert to minutes for easier comparison
+      const openTimeInMinutes = openHour * 60 + openMinute;
+      const closeTimeInMinutes = closeHour * 60 + closeMinute;
+      const slotTimeInMinutes = date.getHours() * 60 + date.getMinutes();
+
+      // Check if the time slot is within business hours
+      return (
+        slotTimeInMinutes >= openTimeInMinutes &&
+        slotTimeInMinutes < closeTimeInMinutes
+      );
+    },
+    [isDayOpen, getBusinessHoursForDay]
+  );
+
+  // Gerar os horários do dia com base nos horários de funcionamento
+  const dayHours = useMemo(() => {
+    const slots: Date[] = [];
+
+    // Default business hours if none are configured
+    const defaultOpenHour = 8; // Changed from 9 to 8
+    const defaultCloseHour = 18; // Changed from 19 to 18
+
+    // For each day in the view
+    daysToShow.forEach((day) => {
+      // Find the earliest open time and latest close time across all days
+      // to determine the full range of hours to display
+      let earliestOpenHour = 23;
+      let latestCloseHour = 0;
+
+      // Check all days to find the earliest and latest business hours
+      Object.values(businessHours).forEach((hours) => {
+        if (hours.is_open) {
+          const [openHour] = hours.open_time.split(":").map(Number);
+          const [closeHour] = hours.close_time.split(":").map(Number);
+
+          earliestOpenHour = Math.min(earliestOpenHour, openHour);
+          latestCloseHour = Math.max(latestCloseHour, closeHour);
+        }
+      });
+
+      // If no business hours are configured or all days are closed, use defaults
+      if (earliestOpenHour > latestCloseHour) {
+        earliestOpenHour = defaultOpenHour;
+        latestCloseHour = defaultCloseHour;
+      }
+
+      // Generate slots for the entire day based on the business hours range
+      for (let hour = earliestOpenHour; hour < latestCloseHour; hour++) {
+        for (let minute = 0; minute < 60; minute += 15) {
+          slots.push(
+            new Date(
+              day.getFullYear(),
+              day.getMonth(),
+              day.getDate(),
+              hour,
+              minute
+            )
+          );
+        }
+      }
+    });
+
     return slots;
-  }, [currentDate]);
+  }, [daysToShow, businessHours]);
 
   // Determinar quantos dias mostrar com base na largura da tela (para mobile)
   const [visibleDays, setVisibleDays] = useState(daysToShow);
@@ -281,6 +446,7 @@ export function CalendarView() {
           fetchAppointments(),
           fetchClients(),
           fetchAllAvailability(),
+          fetchBusinessHours(),
         ]);
       } finally {
         setIsLoading(false);
@@ -296,6 +462,7 @@ export function CalendarView() {
     fetchAppointments,
     fetchClients,
     fetchAllAvailability,
+    fetchBusinessHours,
   ]);
 
   useEffect(() => {
@@ -431,26 +598,6 @@ export function CalendarView() {
     }
   };
 
-  const fetchBusinessInfo = async () => {
-    try {
-      const response = await fetch("/api/settings");
-      if (response.ok) {
-        const data = await response.json();
-        if (data.business && data.business.subdomain) {
-          setBusinessSubdomain(data.business.subdomain);
-        } else if (data.business && data.business.name) {
-          // Generate subdomain from name if not set
-          const subdomain = `${data.business.name
-            .toLowerCase()
-            .replace(/\s+/g, "-")}.gendaia.com.br`;
-          setBusinessSubdomain(subdomain);
-        }
-      }
-    } catch (error) {
-      console.error("Error fetching business info:", error);
-    }
-  };
-
   const copyBookingUrl = () => {
     if (businessSubdomain) {
       navigator.clipboard.writeText(`https://${businessSubdomain}`);
@@ -458,11 +605,6 @@ export function CalendarView() {
       setTimeout(() => setShowCopyToast(false), 3000);
     }
   };
-
-  useEffect(() => {
-    fetchBusinessInfo();
-    // ... existing code in useEffect
-  }, []);
 
   return (
     <div className="h-full flex flex-col">
@@ -656,20 +798,24 @@ export function CalendarView() {
 
           {/* Cabeçalhos dos dias */}
           <div className={`flex flex-grow ${view === "day" ? "" : "divide-x"}`}>
-            {visibleDays.map((day, i) => (
-              <div
-                key={i}
-                className={`flex-1 flex h-12 flex-col items-center justify-center
-                  ${isSameDay(day, new Date()) ? "bg-accent" : ""}`}
-              >
-                <span className="text-xs font-medium text-muted-foreground">
-                  {format(day, "EEE", { locale: ptBR })}
-                </span>
-                <span className="text-sm font-semibold">
-                  {format(day, "dd")}
-                </span>
-              </div>
-            ))}
+            {visibleDays.map((day, i) => {
+              const isOpen = isDayOpen(day);
+              return (
+                <div
+                  key={i}
+                  className={`flex-1 flex h-12 flex-col items-center justify-center
+                    ${isSameDay(day, new Date()) ? "bg-accent" : ""}
+                    ${!isOpen ? "bg-gray-100 text-gray-400" : ""}`}
+                >
+                  <span className="text-xs font-medium text-muted-foreground">
+                    {format(day, "EEE", { locale: ptBR })}
+                  </span>
+                  <span className="text-sm font-semibold">
+                    {format(day, "dd")}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </div>
 
@@ -677,14 +823,31 @@ export function CalendarView() {
         <div className="flex relative">
           {/* Coluna de horários - fixa à esquerda */}
           <div className="sticky left-0 flex-shrink-0 w-14 sm:w-20 bg-background z-10">
-            {dayHours.map((hour, i) => (
-              <div
-                key={i}
-                className="flex h-12 items-center justify-center border-b border-r text-xs sm:text-sm text-muted-foreground"
-              >
-                {format(hour, "HH:mm")}
-              </div>
-            ))}
+            {dayHours
+              .filter(
+                (hour, index, self) =>
+                  // Only show each time once in the time column
+                  index ===
+                  self.findIndex(
+                    (h) =>
+                      h.getHours() === hour.getHours() &&
+                      h.getMinutes() === hour.getMinutes()
+                  )
+              )
+              .sort(
+                (a, b) =>
+                  a.getHours() * 60 +
+                  a.getMinutes() -
+                  (b.getHours() * 60 + b.getMinutes())
+              )
+              .map((hour, i) => (
+                <div
+                  key={i}
+                  className="flex h-12 items-center justify-center border-b border-r text-xs sm:text-sm text-muted-foreground"
+                >
+                  {format(hour, "HH:mm")}
+                </div>
+              ))}
           </div>
 
           {/* Grade principal do calendário */}
@@ -696,125 +859,170 @@ export function CalendarView() {
                 <div
                   className={`flex w-full ${view === "day" ? "" : "divide-x"}`}
                 >
-                  {visibleDays.map((day, dayIndex) => (
-                    <div key={dayIndex} className="flex-1 min-w-0">
-                      {dayHours.map((hour, hourIndex) => {
-                        const currentHour = new Date(
-                          day.getFullYear(),
-                          day.getMonth(),
-                          day.getDate(),
-                          hour.getHours(),
-                          hour.getMinutes()
-                        );
+                  {visibleDays.map((day, dayIndex) => {
+                    const isOpen = isDayOpen(day);
+                    return (
+                      <div
+                        key={dayIndex}
+                        className={`flex-1 min-w-0 ${
+                          !isOpen ? "bg-gray-100" : ""
+                        }`}
+                      >
+                        {isOpen ? (
+                          dayHours
+                            .filter(
+                              (hour) =>
+                                hour.getFullYear() === day.getFullYear() &&
+                                hour.getMonth() === day.getMonth() &&
+                                hour.getDate() === day.getDate()
+                            )
+                            .map((hour, hourIndex) => {
+                              const currentHour = new Date(
+                                day.getFullYear(),
+                                day.getMonth(),
+                                day.getDate(),
+                                hour.getHours(),
+                                hour.getMinutes()
+                              );
 
-                        // Get all appointments for this time slot
-                        const timeSlotAppointments =
-                          filteredAppointments.filter((app) => {
-                            const appDate = new Date(app.start_time);
-                            return (
-                              isSameDay(appDate, currentHour) &&
-                              appDate.getHours() === currentHour.getHours() &&
-                              appDate.getMinutes() === currentHour.getMinutes()
-                            );
-                          });
+                              // Check if this time slot is within business hours
+                              const isWithinBusinessHours =
+                                isTimeSlotWithinBusinessHours(currentHour);
 
-                        return (
-                          <div
-                            key={hourIndex}
-                            className="group relative h-12 border-b border-dashed border-border"
-                            onClick={() =>
-                              openAppointmentModal(
-                                currentHour,
-                                selectedProfessional || professionals[0]?.id
-                              )
-                            }
-                          >
-                            <div className="absolute inset-0 flex flex-col gap-1 p-1">
-                              {timeSlotAppointments.map((appointment) => {
-                                const professional = getProfessional(
-                                  appointment.professional_id
-                                );
-                                const startTime = new Date(
-                                  appointment.start_time
-                                );
-                                const endTime = new Date(appointment.end_time);
-                                const durationInMinutes =
-                                  (endTime.getTime() - startTime.getTime()) /
-                                  (1000 * 60);
-                                const heightInSlots =
-                                  (durationInMinutes / 30) * 48; // 48px is the height of one slot
+                              // Get all appointments for this time slot
+                              const timeSlotAppointments =
+                                filteredAppointments.filter((app) => {
+                                  const appDate = new Date(app.start_time);
+                                  return (
+                                    isSameDay(appDate, currentHour) &&
+                                    appDate.getHours() ===
+                                      currentHour.getHours() &&
+                                    appDate.getMinutes() ===
+                                      currentHour.getMinutes()
+                                  );
+                                });
 
-                                // Skip rendering if this isn't the start time slot
-                                if (
-                                  startTime.getHours() !==
-                                    currentHour.getHours() ||
-                                  startTime.getMinutes() !==
-                                    currentHour.getMinutes()
-                                ) {
-                                  return null;
-                                }
-
-                                return (
-                                  <div
-                                    key={appointment.id}
-                                    className="absolute left-0 right-0 flex flex-col rounded-md p-1 text-xs text-white cursor-pointer hover:brightness-90 transition-all overflow-hidden"
-                                    style={{
-                                      backgroundColor:
-                                        professional?.color || "#3b82f6",
-                                      height: `${heightInSlots}px`,
-                                      zIndex: 10,
-                                      top: 0,
-                                      minHeight: "24px",
-                                    }}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
+                              return (
+                                <div
+                                  key={hourIndex}
+                                  className={`group relative h-12 border-b border-dashed border-border ${
+                                    !isWithinBusinessHours ? "bg-gray-100" : ""
+                                  }`}
+                                  onClick={() => {
+                                    if (isWithinBusinessHours) {
                                       openAppointmentModal(
                                         currentHour,
-                                        professional?.id || "",
-                                        appointment
+                                        selectedProfessional ||
+                                          professionals[0]?.id
                                       );
-                                    }}
-                                  >
-                                    <div className="flex flex-col gap-0.5 min-h-0 h-full">
-                                      <div className="flex items-center gap-1 min-w-0">
-                                        <span className="font-medium truncate">
-                                          {appointment.clients.name}
-                                        </span>
-                                        <span className="truncate opacity-75">
-                                          {appointment.services.name} -{" "}
-                                          {format(startTime, "HH:mm")}
-                                        </span>
-                                      </div>
-                                      {heightInSlots >= 32 && (
-                                        <>
-                                          <span className="text-[10px] opacity-75 whitespace-nowrap">
-                                            {format(startTime, "HH:mm")} -{" "}
-                                            {format(endTime, "HH:mm")}
-                                          </span>
-                                        </>
-                                      )}
-                                      {heightInSlots < 32 &&
-                                        heightInSlots >= 24 && (
-                                          <span className="text-[10px] opacity-75 whitespace-nowrap">
-                                            {format(startTime, "HH:mm")} -{" "}
-                                            {format(endTime, "HH:mm")}
+                                    }
+                                  }}
+                                >
+                                  <div className="absolute inset-0 flex flex-col gap-1 p-1">
+                                    {timeSlotAppointments.map((appointment) => {
+                                      const professional = getProfessional(
+                                        appointment.professional_id
+                                      );
+                                      const startTime = new Date(
+                                        appointment.start_time
+                                      );
+                                      const endTime = new Date(
+                                        appointment.end_time
+                                      );
+                                      const durationInMinutes =
+                                        (endTime.getTime() -
+                                          startTime.getTime()) /
+                                        (1000 * 60);
+
+                                      // Fix the height calculation to account for 15-minute slots
+                                      // Each 15-minute slot is 48px tall (h-12 = 48px)
+                                      const heightInSlots =
+                                        (durationInMinutes / 15) * 48;
+
+                                      // Skip rendering if this isn't the start time slot
+                                      if (
+                                        startTime.getHours() !==
+                                          currentHour.getHours() ||
+                                        startTime.getMinutes() !==
+                                          currentHour.getMinutes()
+                                      ) {
+                                        return null;
+                                      }
+
+                                      return (
+                                        <div
+                                          key={appointment.id}
+                                          className="absolute left-0 right-0 flex flex-col rounded-md p-1 text-xs text-white cursor-pointer hover:brightness-90 transition-all overflow-hidden"
+                                          style={{
+                                            backgroundColor:
+                                              professional?.color || "#3b82f6",
+                                            height: `${heightInSlots}px`,
+                                            zIndex: 10,
+                                            top: 0,
+                                            minHeight: "24px",
+                                          }}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            openAppointmentModal(
+                                              currentHour,
+                                              professional?.id || "",
+                                              appointment
+                                            );
+                                          }}
+                                        >
+                                          <div className="flex flex-col gap-0.5 min-h-0 h-full">
+                                            <div className="flex items-center gap-1 min-w-0">
+                                              <span className="font-medium truncate">
+                                                {appointment.clients.name}
+                                              </span>
+                                              <span className="truncate opacity-75">
+                                                {appointment.services.name} -{" "}
+                                                {format(startTime, "HH:mm")}
+                                              </span>
+                                            </div>
+                                            {heightInSlots >= 32 && (
+                                              <>
+                                                <span className="text-[10px] opacity-75 whitespace-nowrap">
+                                                  {format(startTime, "HH:mm")} -{" "}
+                                                  {format(endTime, "HH:mm")}
+                                                </span>
+                                              </>
+                                            )}
+                                            {heightInSlots < 32 &&
+                                              heightInSlots >= 24 && (
+                                                <span className="text-[10px] opacity-75 whitespace-nowrap">
+                                                  {format(startTime, "HH:mm")} -{" "}
+                                                  {format(endTime, "HH:mm")}
+                                                </span>
+                                              )}
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                    {timeSlotAppointments.length === 0 && (
+                                      <div className="absolute inset-0 flex cursor-pointer items-center justify-center opacity-0 transition-opacity group-hover:opacity-100">
+                                        {isWithinBusinessHours && (
+                                          <Plus className="h-4 w-4" />
+                                        )}
+                                        {!isWithinBusinessHours && (
+                                          <span className="text-xs text-gray-400">
+                                            Fechado
                                           </span>
                                         )}
-                                    </div>
+                                      </div>
+                                    )}
                                   </div>
-                                );
-                              })}
-                              {timeSlotAppointments.length === 0 && (
-                                <div className="absolute inset-0 flex cursor-pointer items-center justify-center opacity-0 transition-opacity group-hover:opacity-100">
-                                  <Plus className="h-4 w-4" />
                                 </div>
-                              )}
-                            </div>
+                              );
+                            })
+                        ) : (
+                          <div className="h-24 flex items-center justify-center text-gray-500 text-sm">
+                            Fechado
                           </div>
-                        );
-                      })}
-                    </div>
-                  ))}
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </>
             )}
@@ -836,8 +1044,8 @@ export function CalendarView() {
         clients={clients}
         onClientSearch={setClientSearchTerm}
         onClientCreated={handleClientCreated}
-        onAppointmentCreated={fetchAppointments}
-        onAppointmentUpdated={fetchAppointments}
+        onAppointmentCreated={refreshAppointmentsAndAvailability}
+        onAppointmentUpdated={refreshAppointmentsAndAvailability}
         professionalsAvailability={professionalsAvailability}
       />
 

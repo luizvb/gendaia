@@ -16,7 +16,7 @@ export const dynamic = "force-dynamic";
 const BUSINESS_HOURS = {
   start: { hour: 9, minute: 0 }, // 9:00
   end: { hour: 19, minute: 0 }, // 19:00
-  interval: 30, // minutos
+  interval: 15, // minutos
 };
 
 interface Appointment {
@@ -207,13 +207,24 @@ function calculateAvailableSlots(
     return (appointments || []).some((appointment: Appointment) => {
       const appointmentStart = new Date(appointment.start_time);
       const appointmentEnd = new Date(appointment.end_time);
-      return start < appointmentEnd && end > appointmentStart;
+
+      // Verificar se há sobreposição entre os intervalos
+      // Um intervalo sobrepõe outro se:
+      // - O início do novo é anterior ao fim do existente E
+      // - O fim do novo é posterior ao início do existente
+      return (
+        (start < appointmentEnd && end > appointmentStart) ||
+        // Também verificar casos específicos de início/fim exatamente iguais
+        start.getTime() === appointmentStart.getTime() ||
+        end.getTime() === appointmentEnd.getTime()
+      );
     });
   };
 
-  // Gerar slots disponíveis
+  // Gerar slots disponíveis a cada 15 minutos
   while (currentSlot < dayEnd) {
-    const slotEnd = addMinutes(currentSlot, serviceDuration);
+    // Para cada slot de 15 minutos, verificamos se um serviço com a duração mínima (15 min) caberia
+    const slotEnd = addMinutes(currentSlot, 15);
 
     // Verificar se o slot inteiro cabe no horário de funcionamento
     // e se não há conflito com outros agendamentos
@@ -221,7 +232,7 @@ function calculateAvailableSlots(
       availableSlots.push(format(currentSlot, "HH:mm"));
     }
 
-    // Avançar para o próximo slot
+    // Avançar para o próximo slot de 15 minutos
     currentSlot = addMinutes(currentSlot, BUSINESS_HOURS.interval);
   }
 

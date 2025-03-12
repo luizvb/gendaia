@@ -198,6 +198,9 @@ export function AppointmentModal({
     if (!date || !professionalId || !serviceId) return;
 
     try {
+      // Flag to track if we've already shown an error message
+      let errorShown = false;
+
       setIsLoadingTimeSlots(true);
       const selectedService = services.find((s) => s.id === serviceId);
       if (!selectedService) return;
@@ -209,12 +212,49 @@ export function AppointmentModal({
         professionalsAvailability &&
         Object.keys(professionalsAvailability).length > 0
       ) {
-        const availableSlots =
+        // Get all available 15-minute slots
+        const allAvailableSlots =
           professionalsAvailability[professionalId]?.[formattedDate] || [];
-        setTimeSlots(availableSlots);
+
+        // Filter slots based on service duration
+        // For services longer than 15 minutes, we need to ensure consecutive slots are available
+        const serviceDurationInMinutes = selectedService.duration;
+        const requiredConsecutiveSlots = Math.ceil(
+          serviceDurationInMinutes / 15
+        );
+
+        // Only keep slots that have enough consecutive slots available after them
+        const validSlots = allAvailableSlots.filter((slot, index) => {
+          // If we only need one slot (15 min service), this slot is valid
+          if (requiredConsecutiveSlots === 1) return true;
+
+          // For longer services, check if we have enough consecutive slots
+          const [hours, minutes] = slot.split(":").map(Number);
+          const slotTime = new Date(0, 0, 0, hours, minutes);
+
+          // Check if we have enough consecutive slots
+          for (let i = 1; i < requiredConsecutiveSlots; i++) {
+            // Calculate the next slot time (current + i*15 minutes)
+            const nextSlotTime = new Date(slotTime);
+            nextSlotTime.setMinutes(nextSlotTime.getMinutes() + i * 15);
+
+            // Format to HH:mm for comparison
+            const nextSlotFormatted = format(nextSlotTime, "HH:mm");
+
+            // If the next required slot is not available, this starting slot is not valid
+            if (!allAvailableSlots.includes(nextSlotFormatted)) {
+              return false;
+            }
+          }
+
+          // If we got here, all required consecutive slots are available
+          return true;
+        });
+
+        setTimeSlots(validSlots);
 
         // If in edit mode, check if the current time is still available
-        if (isEditMode && time && !availableSlots.includes(time)) {
+        if (isEditMode && time && !validSlots.includes(time)) {
           // Keep the current time in edit mode even if not in available slots
           // This is because the current appointment is occupying this slot
           if (selectedAppointment) {
@@ -226,11 +266,17 @@ export function AppointmentModal({
               // This is the current appointment's time, so it's valid
             } else {
               setTime("");
-              toast.error("O horário selecionado não está mais disponível");
+              if (!errorShown) {
+                toast.error("O horário selecionado não está mais disponível");
+                errorShown = true;
+              }
             }
           } else {
             setTime("");
-            toast.error("O horário selecionado não está mais disponível");
+            if (!errorShown) {
+              toast.error("O horário selecionado não está mais disponível");
+              errorShown = true;
+            }
           }
         }
 
@@ -262,11 +308,17 @@ export function AppointmentModal({
             // This is the current appointment's time, so it's valid
           } else {
             setTime("");
-            toast.error("O horário selecionado não está mais disponível");
+            if (!errorShown) {
+              toast.error("O horário selecionado não está mais disponível");
+              errorShown = true;
+            }
           }
         } else {
           setTime("");
-          toast.error("O horário selecionado não está mais disponível");
+          if (!errorShown) {
+            toast.error("O horário selecionado não está mais disponível");
+            errorShown = true;
+          }
         }
       }
     } catch (error) {
@@ -292,6 +344,9 @@ export function AppointmentModal({
     if (!date || !professionalId || !serviceId) return;
 
     try {
+      // Flag to track if we've already shown an error message
+      let errorShown = false;
+
       const selectedService = services.find((s) => s.id === serviceId);
       if (!selectedService) return;
 
@@ -302,30 +357,79 @@ export function AppointmentModal({
         professionalsAvailability &&
         Object.keys(professionalsAvailability).length > 0
       ) {
-        const availableSlots =
+        // Get all available 15-minute slots
+        const allAvailableSlots =
           professionalsAvailability[professionalId]?.[formattedDate] || [];
+
+        // Filter slots based on service duration
+        const serviceDurationInMinutes = selectedService.duration;
+        const requiredConsecutiveSlots = Math.ceil(
+          serviceDurationInMinutes / 15
+        );
+
+        // Only keep slots that have enough consecutive slots available after them
+        const validSlots = allAvailableSlots.filter((slot) => {
+          // If we only need one slot (15 min service), this slot is valid
+          if (requiredConsecutiveSlots === 1) return true;
+
+          // For longer services, check if we have enough consecutive slots
+          const [hours, minutes] = slot.split(":").map(Number);
+          const slotTime = new Date(0, 0, 0, hours, minutes);
+
+          // Check if we have enough consecutive slots
+          for (let i = 1; i < requiredConsecutiveSlots; i++) {
+            // Calculate the next slot time (current + i*15 minutes)
+            const nextSlotTime = new Date(slotTime);
+            nextSlotTime.setMinutes(nextSlotTime.getMinutes() + i * 15);
+
+            // Format to HH:mm for comparison
+            const nextSlotFormatted = format(nextSlotTime, "HH:mm");
+
+            // If the next required slot is not available, this starting slot is not valid
+            if (!allAvailableSlots.includes(nextSlotFormatted)) {
+              return false;
+            }
+          }
+
+          // If we got here, all required consecutive slots are available
+          return true;
+        });
+
         const timeStr =
           time || format(selectedSlot?.date || new Date(), "HH:mm");
 
         // If the current time is not available, clear the selection
-        if (!availableSlots.includes(timeStr)) {
+        if (!validSlots.includes(timeStr)) {
           // In edit mode, check if this is the current appointment's time
           if (isEditMode && selectedAppointment) {
             const appointmentTime = format(
               new Date(selectedAppointment.start_time),
               "HH:mm"
             );
-            if (appointmentTime !== timeStr) {
+
+            // Se o horário e o profissional são os mesmos do agendamento original, é válido
+            if (
+              appointmentTime === timeStr &&
+              selectedAppointment.professional_id.toString() === professionalId
+            ) {
+              // This is the current appointment's time, so it's valid
+            } else {
               setTime("");
-              toast.error(
-                "O horário selecionado não está mais disponível com este profissional"
-              );
+              if (!errorShown) {
+                toast.error(
+                  "O horário selecionado não está mais disponível com este profissional"
+                );
+                errorShown = true;
+              }
             }
           } else {
             setTime("");
-            toast.error(
-              "O horário selecionado não está mais disponível com este profissional"
-            );
+            if (!errorShown) {
+              toast.error(
+                "O horário selecionado não está mais disponível com este profissional"
+              );
+              errorShown = true;
+            }
           }
         }
       } else {
@@ -342,12 +446,39 @@ export function AppointmentModal({
         const timeStr =
           time || format(selectedSlot?.date || new Date(), "HH:mm");
 
-        // Se o horário atual não estiver disponível, limpar a seleção
+        // If the current time is not available, clear the selection
         if (!data.available_slots.includes(timeStr)) {
-          setTime("");
-          toast.error(
-            "O horário selecionado não está mais disponível com este profissional"
-          );
+          // In edit mode, check if this is the current appointment's time
+          if (isEditMode && selectedAppointment) {
+            const appointmentTime = format(
+              new Date(selectedAppointment.start_time),
+              "HH:mm"
+            );
+
+            // Se o horário e o profissional são os mesmos do agendamento original, é válido
+            if (
+              appointmentTime === timeStr &&
+              selectedAppointment.professional_id.toString() === professionalId
+            ) {
+              // This is the current appointment's time, so it's valid
+            } else {
+              setTime("");
+              if (!errorShown) {
+                toast.error(
+                  "O horário selecionado não está mais disponível com este profissional"
+                );
+                errorShown = true;
+              }
+            }
+          } else {
+            setTime("");
+            if (!errorShown) {
+              toast.error(
+                "O horário selecionado não está mais disponível com este profissional"
+              );
+              errorShown = true;
+            }
+          }
         }
       }
     } catch (error) {
@@ -477,14 +608,24 @@ export function AppointmentModal({
           requestedTime: timeStr,
         });
 
-        // Se for edição, permitir o mesmo horário
+        // Se for edição, precisamos verificar se o horário é o mesmo do agendamento atual
+        // ou se está disponível na lista de slots
         if (isEditMode && selectedAppointment) {
           const appointmentTime = format(
             new Date(selectedAppointment.start_time),
             "HH:mm"
           );
-          isAvailable =
-            availableSlots.includes(timeStr) || appointmentTime === timeStr;
+
+          // Se o horário e o profissional são os mesmos do agendamento original, é válido
+          if (
+            appointmentTime === timeStr &&
+            selectedAppointment.professional_id.toString() === professionalId
+          ) {
+            isAvailable = true;
+          } else {
+            // Se mudou o horário ou o profissional, precisa verificar disponibilidade
+            isAvailable = availableSlots.includes(timeStr);
+          }
         } else {
           isAvailable = availableSlots.includes(timeStr);
         }
@@ -508,21 +649,30 @@ export function AppointmentModal({
           requestedTime: timeStr,
         });
 
-        // Se for edição, permitir o mesmo horário
+        // Se for edição, precisamos verificar se o horário é o mesmo do agendamento atual
+        // ou se está disponível na lista de slots
         if (isEditMode && selectedAppointment) {
           const appointmentTime = format(
             new Date(selectedAppointment.start_time),
             "HH:mm"
           );
-          isAvailable =
-            availabilityData.available_slots.includes(timeStr) ||
-            appointmentTime === timeStr;
+
+          // Se o horário e o profissional são os mesmos do agendamento original, é válido
+          if (
+            appointmentTime === timeStr &&
+            selectedAppointment.professional_id.toString() === professionalId
+          ) {
+            isAvailable = true;
+          } else {
+            // Se mudou o horário ou o profissional, precisa verificar disponibilidade
+            isAvailable = availabilityData.available_slots.includes(timeStr);
+          }
         } else {
           isAvailable = availabilityData.available_slots.includes(timeStr);
         }
       }
 
-      if (!isAvailable && !isEditMode) {
+      if (!isAvailable) {
         console.log("Horário não disponível");
         toast.error("Este horário não está mais disponível");
         return;
@@ -624,6 +774,8 @@ export function AppointmentModal({
 
           console.log("Agendamento atualizado com sucesso");
           toast.success("Agendamento atualizado com sucesso!");
+
+          // Remove the unnecessary fetchAvailableTimeSlots call
           onAppointmentUpdated?.();
         } else {
           // Criar novo agendamento
@@ -665,6 +817,8 @@ export function AppointmentModal({
           console.log("Agendamento criado com sucesso:", result);
 
           toast.success("Agendamento criado com sucesso!");
+
+          // Remove the unnecessary fetchAvailableTimeSlots call
           onAppointmentCreated?.();
         }
       } catch (appointmentError) {
@@ -706,6 +860,8 @@ export function AppointmentModal({
       }
 
       toast.success("Agendamento excluído com sucesso!");
+
+      // Remove the unnecessary fetchAvailableTimeSlots call
       onAppointmentUpdated?.();
       onClose();
     } catch (error) {

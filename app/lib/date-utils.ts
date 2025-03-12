@@ -1,7 +1,7 @@
 export const BUSINESS_HOURS = {
   start: { hour: 9, minute: 0 },
   end: { hour: 19, minute: 0 },
-  interval: 30,
+  interval: 15,
 };
 
 // Helper function to generate time slots
@@ -60,6 +60,16 @@ export function hasAppointmentConflict(
   return existingAppointments.some((appointment) => {
     const appointmentStart = new Date(appointment.start_time);
     const appointmentEnd = new Date(appointment.end_time);
-    return startTime < appointmentEnd && endTime > appointmentStart;
+
+    // Verificar se há sobreposição entre os intervalos
+    // Um intervalo sobrepõe outro se:
+    // - O início do novo é anterior ao fim do existente E
+    // - O fim do novo é posterior ao início do existente
+    return (
+      (startTime < appointmentEnd && endTime > appointmentStart) ||
+      // Também verificar casos específicos de início/fim exatamente iguais
+      startTime.getTime() === appointmentStart.getTime() ||
+      endTime.getTime() === appointmentEnd.getTime()
+    );
   });
 }

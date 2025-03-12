@@ -6,6 +6,7 @@ import {
   createSimpleCachedHandler,
   invalidateSimpleCache,
 } from "@/lib/simple-cache";
+import { format } from "date-fns";
 
 // Handler original para GET
 async function getAppointmentsHandler(request: NextRequest) {
@@ -191,6 +192,23 @@ export async function POST(request: NextRequest) {
     const startTime = new Date(body.start_time);
     const endTime = new Date(startTime.getTime() + service.duration * 60000);
 
+    // Verificar se há conflito com outros agendamentos do mesmo profissional
+    const { data: existingAppointments, error: conflictError } = await supabase
+      .from("appointments")
+      .select("start_time, end_time")
+      .eq("professional_id", body.professional_id)
+      .eq("business_id", businessId)
+      .gte("start_time", format(startTime, "yyyy-MM-dd") + "T00:00:00")
+      .lt("start_time", format(startTime, "yyyy-MM-dd") + "T23:59:59");
+
+    if (conflictError) {
+      console.error("Error checking for conflicts:", conflictError);
+      return NextResponse.json(
+        { error: "Failed to check appointment conflicts" },
+        { status: 500 }
+      );
+    }
+
     // Create appointment
     const { data, error } = await supabase
       .from("appointments")
@@ -294,6 +312,59 @@ export async function PUT(request: NextRequest) {
         updateData.end_time = new Date(
           startTime.getTime() + service.duration * 60000
         ).toISOString();
+
+        // Verificar se há conflito com outros agendamentos do mesmo profissional
+        // Excluindo o próprio agendamento que está sendo atualizado
+        const professionalId =
+          body.professional_id ||
+          (
+            await supabase
+              .from("appointments")
+              .select("professional_id")
+              .eq("id", body.id)
+              .single()
+          ).data?.professional_id;
+
+        if (professionalId) {
+          const { data: existingAppointments, error: conflictError } =
+            await supabase
+              .from("appointments")
+              .select("start_time, end_time")
+              .eq("professional_id", professionalId)
+              .eq("business_id", businessId)
+              .neq("id", body.id) // Excluir o próprio agendamento
+              .gte("start_time", format(startTime, "yyyy-MM-dd") + "T00:00:00")
+              .lt("start_time", format(startTime, "yyyy-MM-dd") + "T23:59:59");
+
+          if (conflictError) {
+            console.error("Error checking for conflicts:", conflictError);
+            return NextResponse.json(
+              { error: "Failed to check appointment conflicts" },
+              { status: 500 }
+            );
+          }
+
+          const endTime = new Date(updateData.end_time);
+
+          // Verificar se há sobreposição com agendamentos existentes
+          const hasConflict = existingAppointments.some((appointment) => {
+            const appointmentStart = new Date(appointment.start_time);
+            const appointmentEnd = new Date(appointment.end_time);
+
+            return (
+              (startTime < appointmentEnd && endTime > appointmentStart) ||
+              startTime.getTime() === appointmentStart.getTime() ||
+              endTime.getTime() === appointmentEnd.getTime()
+            );
+          });
+
+          if (hasConflict) {
+            return NextResponse.json(
+              { error: "Este horário já está ocupado para este profissional" },
+              { status: 409 }
+            );
+          }
+        }
       }
     }
 
