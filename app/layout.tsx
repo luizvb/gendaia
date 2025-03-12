@@ -15,6 +15,14 @@ export const metadata: Metadata = {
   description:
     "Plataforma elegante e minimalista para gerenciar agendamentos de serviços com Inteligência Artificial",
   manifest: "/manifest.json",
+  icons: {
+    icon: [
+      { url: "/favicon.ico" },
+      { url: "/images/icon-192x192.png", sizes: "192x192", type: "image/png" },
+      { url: "/images/icon-512x512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/images/icon-192x192.png" }],
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
@@ -38,7 +46,6 @@ export default function RootLayout({
   return (
     <html lang="pt-BR" suppressHydrationWarning>
       <head>
-        <link rel="apple-touch-icon" href="/images/icon-192x192.png" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta
           name="apple-mobile-web-app-status-bar-style"
@@ -48,15 +55,24 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `
               if ('serviceWorker' in navigator) {
-                window.addEventListener('load', function() {
-                  navigator.serviceWorker.register('/sw.js').then(
-                    function(registration) {
-                      console.log('Service Worker registrado com sucesso:', registration.scope);
-                    },
-                    function(err) {
-                      console.log('Falha ao registrar Service Worker:', err);
+                window.addEventListener('load', async function() {
+                  try {
+                    // First check if service worker is already registered
+                    const registration = await navigator.serviceWorker.getRegistration();
+                    if (registration) {
+                      console.log('Service Worker already registered');
+                      return;
                     }
-                  );
+
+                    // If not registered, register it
+                    const newRegistration = await navigator.serviceWorker.register('/sw.js', {
+                      scope: '/',
+                      updateViaCache: 'none'
+                    });
+                    console.log('Service Worker registered successfully:', newRegistration.scope);
+                  } catch (err) {
+                    console.error('Service Worker registration failed:', err);
+                  }
                 });
               }
             `,

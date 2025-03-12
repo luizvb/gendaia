@@ -9,11 +9,12 @@ export function ThemeImage() {
 
   return (
     <Image
-      src={isDark ? "/demo.png" : "/demowhite.png"}
-      alt="Demonstração da plataforma"
-      fill
+      alt="Demo"
       className="object-cover"
-      priority
+      height={350}
+      width={500}
+      priority={false}
+      src={isDark ? "/demowhite.png" : "/demowhite.png"}
     />
   );
 }

@@ -5,6 +5,7 @@ import {
   useContext,
   useState,
   useEffect,
+  useCallback,
   ReactNode,
 } from "react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
@@ -23,13 +24,13 @@ export function ApiLoadingProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(false);
   const [pendingRequests, setPendingRequests] = useState(0);
 
-  const startLoading = () => {
+  const startLoading = useCallback(() => {
     setPendingRequests((prev) => prev + 1);
-  };
+  }, []);
 
-  const stopLoading = () => {
+  const stopLoading = useCallback(() => {
     setPendingRequests((prev) => Math.max(0, prev - 1));
-  };
+  }, []);
 
   useEffect(() => {
     setIsLoading(pendingRequests > 0);
@@ -44,21 +45,21 @@ export function ApiLoadingProvider({ children }: { children: ReactNode }) {
 
       // Get the pathname from the request URL
       let pathname: string;
-      if (resource instanceof URL) {
-        pathname = resource.pathname;
-      } else if (typeof resource === "string") {
-        try {
+      try {
+        if (resource instanceof URL) {
+          pathname = resource.pathname;
+        } else if (typeof resource === "string") {
           // Handle both absolute and relative URLs
           const url = resource.startsWith("http")
             ? new URL(resource)
             : new URL(resource, window.location.origin);
           pathname = url.pathname;
-        } catch {
-          pathname = resource;
+        } else if (resource instanceof Request) {
+          pathname = new URL(resource.url).pathname;
+        } else {
+          pathname = "";
         }
-      } else if (resource instanceof Request) {
-        pathname = new URL(resource.url).pathname;
-      } else {
+      } catch {
         pathname = "";
       }
 
@@ -68,10 +69,13 @@ export function ApiLoadingProvider({ children }: { children: ReactNode }) {
         pathname.includes("/audio") ||
         pathname.includes("/transcribe");
 
-      // Skip loading for root path
+      // Skip loading for root path and static assets
       const isRootPath = pathname === "/" || pathname === "";
+      const isStaticAsset = pathname.match(
+        /\.(ico|png|jpg|jpeg|gif|svg|js|css)$/
+      );
 
-      if (!isChatRequest && !isRootPath) {
+      if (!isChatRequest && !isRootPath && !isStaticAsset) {
         startLoading();
       }
 
@@ -79,7 +83,7 @@ export function ApiLoadingProvider({ children }: { children: ReactNode }) {
         const response = await originalFetch(...args);
         return response;
       } finally {
-        if (!isChatRequest && !isRootPath) {
+        if (!isChatRequest && !isRootPath && !isStaticAsset) {
           stopLoading();
         }
       }
@@ -88,7 +92,7 @@ export function ApiLoadingProvider({ children }: { children: ReactNode }) {
     return () => {
       window.fetch = originalFetch;
     };
-  }, []);
+  }, [startLoading, stopLoading]);
 
   return (
     <ApiLoadingContext.Provider

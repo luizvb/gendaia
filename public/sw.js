@@ -43,7 +43,7 @@ self.addEventListener('activate', (event) => {
     );
 });
 
-// Estratégia de cache: Stale-while-revalidate
+// Estratégia de cache: Network First, then Cache
 self.addEventListener('fetch', (event) => {
     // Skip cross-origin requests
     if (!event.request.url.startsWith(self.location.origin)) {
@@ -55,42 +55,40 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    // For HTML requests - network first, then cache
-    if (event.request.headers.get('accept')?.includes('text/html')) {
+    // Handle navigation requests
+    if (event.request.mode === 'navigate') {
         event.respondWith(
             fetch(event.request)
-                .then((response) => {
-                    const responseClone = response.clone();
-                    caches.open(CACHE_NAME).then((cache) => {
-                        cache.put(event.request, responseClone);
-                    });
-                    return response;
-                })
                 .catch(() => {
-                    return caches.match(event.request);
+                    return caches.match(event.request) || caches.match('/');
                 })
         );
         return;
     }
 
-    // For all other requests - stale-while-revalidate
+    // For all other requests
     event.respondWith(
-        caches.match(event.request).then((cachedResponse) => {
-            // Return cached response immediately if available
-            const fetchPromise = fetch(event.request)
-                .then((networkResponse) => {
-                    // Update the cache
-                    caches.open(CACHE_NAME).then((cache) => {
-                        cache.put(event.request, networkResponse.clone());
-                    });
-                    return networkResponse;
-                })
-                .catch((error) => {
-                    console.error('Fetch failed:', error);
-                });
+        fetch(event.request)
+            .then(response => {
+                // Don't cache redirects or errors
+                if (!response.ok || response.type === 'opaqueredirect') {
+                    return response;
+                }
 
-            return cachedResponse || fetchPromise;
-        })
+                // Clone the response
+                const responseToCache = response.clone();
+
+                // Cache the successful response
+                caches.open(CACHE_NAME)
+                    .then(cache => {
+                        cache.put(event.request, responseToCache);
+                    });
+
+                return response;
+            })
+            .catch(() => {
+                return caches.match(event.request);
+            })
     );
 });
 

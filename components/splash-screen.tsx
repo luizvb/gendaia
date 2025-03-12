@@ -21,10 +21,13 @@ export function SplashScreen({
   const [show, setShow] = useState(true);
   const pathname = usePathname();
 
-  // Skip splash screen for root path
-  if (pathname === "/") return null;
-
   useEffect(() => {
+    // Skip splash screen for root path
+    if (pathname === "/") {
+      setShow(false);
+      return;
+    }
+
     const startTime = Date.now();
 
     const handleLoad = () => {
@@ -43,7 +46,10 @@ export function SplashScreen({
       window.addEventListener("load", handleLoad);
       return () => window.removeEventListener("load", handleLoad);
     }
-  }, [minimumDisplayTime]);
+  }, [minimumDisplayTime, pathname]);
+
+  // Don't render anything for root path
+  if (!show) return null;
 
   return (
     <AnimatePresence>
