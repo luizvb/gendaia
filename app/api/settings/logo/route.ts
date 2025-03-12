@@ -73,8 +73,5 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
