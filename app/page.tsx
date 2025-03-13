@@ -21,7 +21,6 @@ import {
   Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import Image from "next/image";
 import { ThemeImage } from "./components/theme-image";
 
 // Componente BusinessSelector com animações
@@ -441,6 +440,8 @@ export default function Home() {
             {[
               "features",
               "ai-agent",
+              "whatsapp-integration",
+              "crm-reverse",
               "dashboard",
               "pricing",
               "testimonials",
@@ -457,6 +458,8 @@ export default function Home() {
                 >
                   {item === "features" && "Recursos"}
                   {item === "ai-agent" && "Agente IA"}
+                  {item === "whatsapp-integration" && "WhatsApp"}
+                  {item === "crm-reverse" && "CRM Reverso"}
                   {item === "dashboard" && "Dashboard"}
                   {item === "pricing" && "Preços"}
                   {item === "testimonials" && "Depoimentos"}
@@ -507,13 +510,24 @@ export default function Home() {
                   className="flex flex-col justify-center space-y-4"
                 >
                   <div className="space-y-2">
+                    <motion.div
+                      className="inline-flex items-center rounded-full border bg-green-600/10 px-4 py-1.5 text-sm mb-4"
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ duration: 0.5, delay: 0.1 }}
+                    >
+                      <Bot className="mr-2 h-4 w-4 text-green-600" />
+                      <span className="text-sm font-medium text-green-600">
+                        A Melhor Solução de WhatsApp + IA do Mercado
+                      </span>
+                    </motion.div>
                     <motion.h1
                       className="text-3xl font-bold tracking-tighter sm:text-4xl md:text-5xl bg-clip-text text-transparent bg-gradient-to-r from-primary to-primary/70"
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ duration: 0.5, delay: 0.2 }}
                     >
-                      {content.title}
+                      Atendimento Automatizado + Agenda Inteligente
                     </motion.h1>
                     <motion.p
                       className="max-w-[600px] text-muted-foreground md:text-xl"
@@ -521,7 +535,9 @@ export default function Home() {
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ duration: 0.5, delay: 0.3 }}
                     >
-                      {content.description}
+                      A solução definitiva que combina atendimento automatizado
+                      via WhatsApp com gerenciamento inteligente de agenda, tudo
+                      movido por IA de última geração.
                     </motion.p>
                   </div>
                   <motion.div
@@ -533,7 +549,7 @@ export default function Home() {
                     <Link href="/register">
                       <Button
                         size="lg"
-                        className="gap-1 transition-all hover:scale-105 hover:shadow-lg"
+                        className="gap-1 transition-all hover:scale-105 hover:shadow-lg bg-green-600 hover:bg-green-700 text-white"
                       >
                         Comece agora
                         <ArrowRight className="h-4 w-4" />
@@ -543,7 +559,7 @@ export default function Home() {
                       <Button
                         size="lg"
                         variant="outline"
-                        className="transition-all hover:scale-105"
+                        className="transition-all hover:scale-105 border-green-600 text-green-600 hover:bg-green-50 dark:hover:bg-green-950/20"
                       >
                         Saiba mais
                       </Button>
@@ -569,41 +585,18 @@ export default function Home() {
                 style={{ y: heroImageY, opacity }}
               >
                 <motion.div
-                  className="relative h-[350px] w-full overflow-hidden rounded-xl bg-muted shadow-2xl"
+                  className="relative h-[400px] w-full overflow-hidden rounded-xl bg-muted shadow-2xl"
                   initial={{ opacity: 0, scale: 0.9 }}
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ duration: 0.7, delay: 0.2 }}
                   whileHover={{ scale: 1.02 }}
                 >
-                  <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-muted" />
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <ThemeImage />
+                  <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-muted dark:from-primary/10 dark:to-background" />
+                  <div className="absolute inset-0 flex items-center justify-center p-2">
+                    <div className="w-full h-full">
+                      <ThemeImage className="w-full h-full rounded-xl" />
+                    </div>
                   </div>
-                  {/* Elementos decorativos estilo Apple */}
-                  <motion.div
-                    className="absolute -top-20 -right-20 w-40 h-40 rounded-full bg-primary/20 blur-3xl"
-                    animate={{
-                      scale: [1, 1.2, 1],
-                      opacity: [0.5, 0.8, 0.5],
-                    }}
-                    transition={{
-                      duration: 8,
-                      repeat: Infinity,
-                      repeatType: "reverse",
-                    }}
-                  />
-                  <motion.div
-                    className="absolute -bottom-20 -left-20 w-40 h-40 rounded-full bg-primary/30 blur-3xl"
-                    animate={{
-                      scale: [1, 1.3, 1],
-                      opacity: [0.5, 0.7, 0.5],
-                    }}
-                    transition={{
-                      duration: 10,
-                      repeat: Infinity,
-                      repeatType: "reverse",
-                    }}
-                  />
                 </motion.div>
               </motion.div>
             </div>
@@ -1005,21 +998,21 @@ export default function Home() {
                     {[
                       {
                         icon: Smartphone,
-                        title: "Ativação Simples",
+                        title: "Ativação em 30 Segundos",
                         description:
-                          "Basta escanear um QR code do WhatsApp Web e a IA já estará ativa no seu celular em segundos",
+                          "Escaneie o QR code e sua IA estará pronta para atender seus clientes 24/7, mesmo com seu celular desligado",
                       },
                       {
                         icon: Bot,
-                        title: "Funciona 24/7",
+                        title: "IA de Última Geração",
                         description:
-                          "Mesmo com seu celular desligado, a IA continua respondendo e agendando para seus clientes",
+                          "Powered by Claude 3, nossa IA entende contexto, nuances e intenções como um humano, oferecendo atendimento personalizado e natural",
                       },
                       {
                         icon: MessageSquare,
-                        title: "Conversas Naturais",
+                        title: "Atendimento Humanizado",
                         description:
-                          "A IA responde como um atendente real, entendendo pedidos complexos e confirmando detalhes importantes",
+                          "Conversas fluidas e naturais que fazem seus clientes se sentirem atendidos por um profissional real, com empatia e atenção aos detalhes",
                       },
                     ].map((item, index) => (
                       <motion.li
@@ -1241,6 +1234,208 @@ export default function Home() {
                 repeatType: "reverse",
               }}
             />
+          </div>
+        </AnimatedSection>
+
+        <AnimatedSection
+          id="crm-reverse"
+          className="w-full bg-gradient-to-b from-background to-background/80 py-12 md:py-24 lg:py-32 relative"
+        >
+          <div className="container px-4 md:px-6">
+            <div className="grid gap-6 lg:grid-cols-2 lg:gap-12">
+              <motion.div
+                className="flex items-center justify-center"
+                initial={{ opacity: 0, x: -50 }}
+                whileInView={{ opacity: 1, x: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.6 }}
+              >
+                <motion.div
+                  className="relative h-[450px] w-full overflow-hidden rounded-xl bg-muted shadow-2xl"
+                  whileHover={{ scale: 1.02 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-muted" />
+                  <div className="absolute inset-0 flex flex-col items-center justify-center p-6">
+                    <motion.div
+                      className="flex h-16 w-16 items-center justify-center rounded-full bg-primary text-primary-foreground mb-4"
+                      initial={{ scale: 0 }}
+                      whileInView={{ scale: 1 }}
+                      viewport={{ once: true }}
+                      transition={{
+                        type: "spring",
+                        stiffness: 260,
+                        damping: 20,
+                        delay: 0.2,
+                      }}
+                    >
+                      <Bot className="h-8 w-8" />
+                    </motion.div>
+                    <motion.div
+                      className="max-w-md space-y-4 rounded-lg border bg-background p-4 shadow-lg"
+                      initial={{ opacity: 0, y: 20 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      viewport={{ once: true }}
+                      transition={{ duration: 0.5, delay: 0.3 }}
+                    >
+                      <motion.div
+                        className="flex items-start gap-3"
+                        initial={{ opacity: 0, x: -20 }}
+                        whileInView={{ opacity: 1, x: 0 }}
+                        viewport={{ once: true }}
+                        transition={{ duration: 0.5, delay: 0.4 }}
+                      >
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/20">
+                          <Bot className="h-4 w-4 text-primary" />
+                        </div>
+                        <div className="rounded-lg bg-muted p-3">
+                          <p className="text-sm">
+                            Olá! Notei que você não concluiu seu agendamento
+                            ontem. Gostaria de retomar de onde paramos?
+                          </p>
+                        </div>
+                      </motion.div>
+                      <motion.div
+                        className="flex items-start gap-3 justify-end"
+                        initial={{ opacity: 0, x: 20 }}
+                        whileInView={{ opacity: 1, x: 0 }}
+                        viewport={{ once: true }}
+                        transition={{ duration: 0.5, delay: 0.6 }}
+                      >
+                        <div className="rounded-lg bg-primary p-3">
+                          <p className="text-sm text-primary-foreground">
+                            Sim, por favor! Quero agendar para amanhã às 15h
+                          </p>
+                        </div>
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/20">
+                          <Smartphone className="h-4 w-4 text-primary" />
+                        </div>
+                      </motion.div>
+                      <motion.div
+                        className="flex items-start gap-3"
+                        initial={{ opacity: 0, x: -20 }}
+                        whileInView={{ opacity: 1, x: 0 }}
+                        viewport={{ once: true }}
+                        transition={{ duration: 0.5, delay: 0.8 }}
+                      >
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/20">
+                          <Bot className="h-4 w-4 text-primary" />
+                        </div>
+                        <div className="rounded-lg bg-muted p-3">
+                          <p className="text-sm">
+                            Perfeito! Lembro que você estava interessado em{" "}
+                            {selectedBusiness === "medical"
+                              ? "uma consulta de rotina"
+                              : selectedBusiness === "salon"
+                              ? "um corte de cabelo"
+                              : selectedBusiness === "petshop"
+                              ? "um banho para seu pet"
+                              : "uma consulta veterinária"}
+                            . Vou verificar a disponibilidade para amanhã às
+                            15h.
+                          </p>
+                        </div>
+                      </motion.div>
+                    </motion.div>
+                  </div>
+                </motion.div>
+              </motion.div>
+
+              <motion.div
+                key={selectedBusiness}
+                initial={{ opacity: 0, x: 50 }}
+                whileInView={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 50 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.6 }}
+                className="flex flex-col justify-center space-y-4"
+              >
+                <div className="space-y-2">
+                  <motion.div
+                    className="inline-flex items-center rounded-full border bg-muted px-3 py-1 text-sm"
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    whileInView={{ opacity: 1, scale: 1 }}
+                    viewport={{ once: true }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    <Zap className="mr-1 h-3 w-3 text-primary" />
+                    <span className="text-xs font-medium">Exclusivo</span>
+                  </motion.div>
+                  <motion.h2
+                    className="text-3xl font-bold tracking-tighter sm:text-4xl bg-clip-text text-transparent bg-gradient-to-r from-primary to-primary/70"
+                    initial={{ opacity: 0, y: 20 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ duration: 0.5, delay: 0.1 }}
+                  >
+                    CRM Reverso Inteligente
+                  </motion.h2>
+                  <motion.p
+                    className="max-w-[600px] text-muted-foreground md:text-xl"
+                    initial={{ opacity: 0, y: 20 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ duration: 0.5, delay: 0.2 }}
+                  >
+                    Nossa IA monitora todas as conversas e retoma o contato de
+                    forma natural quando percebe oportunidades perdidas
+                  </motion.p>
+                </div>
+                <motion.ul
+                  className="space-y-4"
+                  initial={{ opacity: 0 }}
+                  whileInView={{ opacity: 1 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.5, delay: 0.3 }}
+                >
+                  {[
+                    {
+                      icon: MessageSquare,
+                      title: "Conversas Contínuas",
+                      description:
+                        "A IA lembra do contexto de todas as conversas anteriores e retoma naturalmente de onde parou",
+                    },
+                    {
+                      icon: Bot,
+                      title: "Recuperação Inteligente",
+                      description:
+                        "Identifica automaticamente conversas interrompidas e oportunidades perdidas, retomando o contato no momento ideal",
+                    },
+                    {
+                      icon: Star,
+                      title: "Linguagem Natural Refinada",
+                      description:
+                        "Comunicação extremamente natural que faz seus clientes se sentirem atendidos por um profissional real",
+                    },
+                  ].map((item, index) => (
+                    <motion.li
+                      key={index}
+                      className="flex items-start gap-3"
+                      initial={{ opacity: 0, x: 30 }}
+                      whileInView={{ opacity: 1, x: 0 }}
+                      viewport={{ once: true }}
+                      transition={{ duration: 0.5, delay: 0.3 + index * 0.1 }}
+                    >
+                      <motion.div
+                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10"
+                        whileHover={{
+                          scale: 1.1,
+                          backgroundColor: "rgba(var(--primary), 0.2)",
+                        }}
+                      >
+                        <item.icon className="h-5 w-5 text-primary" />
+                      </motion.div>
+                      <div>
+                        <h3 className="font-medium">{item.title}</h3>
+                        <p className="text-muted-foreground">
+                          {item.description}
+                        </p>
+                      </div>
+                    </motion.li>
+                  ))}
+                </motion.ul>
+              </motion.div>
+            </div>
           </div>
         </AnimatedSection>
 
