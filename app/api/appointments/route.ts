@@ -1,11 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getBusinessId } from "@/lib/business-id";
-import { invalidateCacheTags, CacheTags } from "@/lib/cache-utils";
-import {
-  createSimpleCachedHandler,
-  invalidateSimpleCache,
-} from "@/lib/simple-cache";
 import { format } from "date-fns";
 
 // Handler original para GET
@@ -85,25 +80,82 @@ async function getAppointmentsHandler(request: NextRequest) {
   }
 }
 
-// Aplicando cache simples ao handler GET
-export const GET = createSimpleCachedHandler(getAppointmentsHandler, {
-  // Cache por 5 minutos
-  ttl: 300,
-  // Função personalizada para gerar a chave de cache
-  getCacheKey: (request) => {
-    try {
-      const url = new URL(request.url);
-      const phone = url.searchParams.get("phone") || "";
-      const businessId = request.headers.get("x-business-id") || "";
+// Handler GET sem cache
+export const GET = async (request: NextRequest) => {
+  try {
+    const supabase = await createClient();
 
-      // Criar uma chave de cache baseada no ID do negócio e filtros
-      return `appointments-${businessId}-phone-${phone}`;
-    } catch (error) {
-      console.error("Error creating cache key:", error);
-      return "appointments-default";
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-  },
-});
+
+    const { searchParams } = new URL(request.url);
+    const phone = searchParams.get("phone");
+
+    // Get the business_id using our utility function
+    const businessId = await getBusinessId(request);
+    if (!businessId) {
+      return NextResponse.json(
+        { error: "Business not found" },
+        { status: 404 }
+      );
+    }
+
+    // Base query
+    let query = supabase
+      .from("appointments")
+      .select(
+        `
+        *,
+        clients:client_id (id, name, phone),
+        professionals:professional_id (id, name),
+        services:service_id (id, name, duration, price)
+      `
+      )
+      .eq("business_id", businessId);
+
+    // Apply filters if provided
+    if (phone) {
+      // Join with clients table to filter by phone
+      query = supabase
+        .from("appointments")
+        .select(
+          `
+          *,
+          professionals:professional_id (id, name),
+          services:service_id (id, name, duration, price),
+          clients:client_id (id, name, phone)
+        `
+        )
+        .eq("business_id", businessId)
+        .eq("clients.phone", phone);
+    }
+
+    // Execute query
+    const { data, error } = await query.order("start_time", {
+      ascending: false,
+    });
+
+    if (error) {
+      console.error("Error fetching appointments:", error);
+      return NextResponse.json(
+        { error: "Failed to fetch appointments" },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json(data);
+  } catch (error) {
+    console.error("Error in appointments API:", error);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
+  }
+};
 
 export async function POST(request: NextRequest) {
   try {
@@ -229,21 +281,6 @@ export async function POST(request: NextRequest) {
     if (error) {
       console.error("Error creating appointment:", error);
       return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    // After successfully creating an appointment, invalidate related caches
-    try {
-      invalidateCacheTags([CacheTags.APPOINTMENTS, CacheTags.DASHBOARD]);
-
-      // Invalidar cache simples
-      const businessIdStr = businessId.toString();
-      invalidateSimpleCache(`appointments-${businessIdStr}-phone-`);
-      invalidateSimpleCache(`dashboard-${businessIdStr}-daily`);
-      invalidateSimpleCache(`dashboard-${businessIdStr}-weekly`);
-      invalidateSimpleCache(`dashboard-${businessIdStr}-monthly`);
-    } catch (error) {
-      console.error("Error invalidating cache:", error);
-      // Continuar mesmo se a invalidação falhar
     }
 
     return NextResponse.json(data[0], { status: 201 });
@@ -387,21 +424,6 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // After successfully updating an appointment, invalidate related caches
-    try {
-      invalidateCacheTags([CacheTags.APPOINTMENTS, CacheTags.DASHBOARD]);
-
-      // Invalidar cache simples
-      const businessIdStr = businessId.toString();
-      invalidateSimpleCache(`appointments-${businessIdStr}-phone-`);
-      invalidateSimpleCache(`dashboard-${businessIdStr}-daily`);
-      invalidateSimpleCache(`dashboard-${businessIdStr}-weekly`);
-      invalidateSimpleCache(`dashboard-${businessIdStr}-monthly`);
-    } catch (error) {
-      console.error("Error invalidating cache:", error);
-      // Continuar mesmo se a invalidação falhar
-    }
-
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Error updating appointment:", error);
@@ -453,21 +475,6 @@ export async function DELETE(request: NextRequest) {
     if (error) {
       console.error("Error deleting appointment:", error);
       return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    // After successfully deleting an appointment, invalidate related caches
-    try {
-      invalidateCacheTags([CacheTags.APPOINTMENTS, CacheTags.DASHBOARD]);
-
-      // Invalidar cache simples
-      const businessIdStr = businessId.toString();
-      invalidateSimpleCache(`appointments-${businessIdStr}-phone-`);
-      invalidateSimpleCache(`dashboard-${businessIdStr}-daily`);
-      invalidateSimpleCache(`dashboard-${businessIdStr}-weekly`);
-      invalidateSimpleCache(`dashboard-${businessIdStr}-monthly`);
-    } catch (error) {
-      console.error("Error invalidating cache:", error);
-      // Continuar mesmo se a invalidação falhar
     }
 
     return NextResponse.json({ success: true });

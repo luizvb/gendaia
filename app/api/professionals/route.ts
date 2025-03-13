@@ -1,14 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getBusinessId } from "@/lib/business-id";
-import { invalidateCacheTags, CacheTags } from "@/lib/cache-utils";
-import {
-  createSimpleCachedHandler,
-  invalidateSimpleCache,
-} from "@/lib/simple-cache";
 
-// Handler original para GET
-async function getProfessionalsHandler(request: NextRequest) {
+// Handler GET sem cache
+export const GET = async (request: NextRequest) => {
   try {
     const supabase = await createClient();
     const { searchParams } = new URL(request.url);
@@ -62,25 +57,7 @@ async function getProfessionalsHandler(request: NextRequest) {
       { status: 500 }
     );
   }
-}
-
-// Aplicando cache simples ao handler GET com tempo mais longo (30 minutos)
-export const GET = createSimpleCachedHandler(getProfessionalsHandler, {
-  // Cache por 30 minutos
-  ttl: 1800,
-  // Função personalizada para gerar a chave de cache
-  getCacheKey: (request) => {
-    try {
-      const businessId = request.headers.get("x-business-id") || "";
-
-      // Criar uma chave de cache baseada no ID do negócio
-      return `professionals-${businessId}`;
-    } catch (error) {
-      console.error("Error creating cache key:", error);
-      return "professionals-default";
-    }
-  },
-});
+};
 
 export async function POST(request: NextRequest) {
   try {
@@ -125,21 +102,6 @@ export async function POST(request: NextRequest) {
     if (error) {
       console.error("Error creating professional:", error);
       return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    // Invalidate cache
-    try {
-      invalidateCacheTags([CacheTags.PROFESSIONALS]);
-
-      // Invalidar cache simples
-      const businessIdStr = businessId.toString();
-      invalidateSimpleCache(`professionals-${businessIdStr}`);
-      invalidateSimpleCache(`dashboard-${businessIdStr}-daily`);
-      invalidateSimpleCache(`dashboard-${businessIdStr}-weekly`);
-      invalidateSimpleCache(`dashboard-${businessIdStr}-monthly`);
-    } catch (error) {
-      console.error("Error invalidating cache:", error);
-      // Continuar mesmo se a invalidação falhar
     }
 
     return NextResponse.json(data[0], { status: 201 });
@@ -199,21 +161,6 @@ export async function PUT(request: NextRequest) {
     if (error) {
       console.error("Error updating professional:", error);
       return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    // Invalidate cache
-    try {
-      invalidateCacheTags([CacheTags.PROFESSIONALS]);
-
-      // Invalidar cache simples
-      const businessIdStr = businessId.toString();
-      invalidateSimpleCache(`professionals-${businessIdStr}`);
-      invalidateSimpleCache(`dashboard-${businessIdStr}-daily`);
-      invalidateSimpleCache(`dashboard-${businessIdStr}-weekly`);
-      invalidateSimpleCache(`dashboard-${businessIdStr}-monthly`);
-    } catch (error) {
-      console.error("Error invalidating cache:", error);
-      // Continuar mesmo se a invalidação falhar
     }
 
     return NextResponse.json({ success: true });
@@ -281,21 +228,6 @@ export async function DELETE(request: NextRequest) {
     if (error) {
       console.error("Error deleting professional:", error);
       return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    // Invalidate cache
-    try {
-      invalidateCacheTags([CacheTags.PROFESSIONALS]);
-
-      // Invalidar cache simples
-      const businessIdStr = businessId.toString();
-      invalidateSimpleCache(`professionals-${businessIdStr}`);
-      invalidateSimpleCache(`dashboard-${businessIdStr}-daily`);
-      invalidateSimpleCache(`dashboard-${businessIdStr}-weekly`);
-      invalidateSimpleCache(`dashboard-${businessIdStr}-monthly`);
-    } catch (error) {
-      console.error("Error invalidating cache:", error);
-      // Continuar mesmo se a invalidação falhar
     }
 
     return NextResponse.json({ success: true });

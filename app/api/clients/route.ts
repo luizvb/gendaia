@@ -1,14 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getBusinessId } from "@/lib/business-id";
-import { invalidateCacheTags, CacheTags } from "@/lib/cache-utils";
-import {
-  createSimpleCachedHandler,
-  invalidateSimpleCache,
-} from "@/lib/simple-cache";
 
-// Handler original para GET
-async function getClientsHandler(request: NextRequest) {
+// Handler GET sem cache
+export const GET = async (request: NextRequest) => {
   try {
     const supabase = await createClient();
 
@@ -19,6 +14,9 @@ async function getClientsHandler(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const { searchParams } = new URL(request.url);
+    const phone = searchParams.get("phone");
+
     // Get the business_id using our utility function
     const businessId = await getBusinessId(request);
     if (!businessId) {
@@ -27,10 +25,6 @@ async function getClientsHandler(request: NextRequest) {
         { status: 404 }
       );
     }
-
-    const { searchParams } = new URL(request.url);
-    const phone = searchParams.get("phone");
-    const name = searchParams.get("name");
 
     // Base query
     let query = supabase
@@ -41,10 +35,6 @@ async function getClientsHandler(request: NextRequest) {
     // Apply filters if provided
     if (phone) {
       query = query.eq("phone", phone);
-    }
-
-    if (name) {
-      query = query.ilike("name", `%${name}%`);
     }
 
     // Execute query
@@ -66,28 +56,7 @@ async function getClientsHandler(request: NextRequest) {
       { status: 500 }
     );
   }
-}
-
-// Aplicando cache simples ao handler GET
-export const GET = createSimpleCachedHandler(getClientsHandler, {
-  // Cache por 10 minutos
-  ttl: 600,
-  // Função personalizada para gerar a chave de cache
-  getCacheKey: (request) => {
-    try {
-      const url = new URL(request.url);
-      const phone = url.searchParams.get("phone") || "";
-      const name = url.searchParams.get("name") || "";
-      const businessId = request.headers.get("x-business-id") || "";
-
-      // Criar uma chave de cache baseada no ID do negócio e filtros
-      return `clients-${businessId}-phone-${phone}-name-${name}`;
-    } catch (error) {
-      console.error("Error creating cache key:", error);
-      return "clients-default";
-    }
-  },
-});
+};
 
 export async function POST(request: NextRequest) {
   try {
@@ -151,18 +120,6 @@ export async function POST(request: NextRequest) {
     if (error) {
       console.error("Error creating client:", error);
       return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    // Invalidate cache
-    try {
-      invalidateCacheTags([CacheTags.CLIENTS]);
-
-      // Invalidar cache simples
-      const businessIdStr = businessId.toString();
-      invalidateSimpleCache(`clients-${businessIdStr}-phone-`);
-    } catch (error) {
-      console.error("Error invalidating cache:", error);
-      // Continuar mesmo se a invalidação falhar
     }
 
     return NextResponse.json(data[0], { status: 201 });
@@ -240,18 +197,6 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Invalidate cache
-    try {
-      invalidateCacheTags([CacheTags.CLIENTS]);
-
-      // Invalidar cache simples
-      const businessIdStr = businessId.toString();
-      invalidateSimpleCache(`clients-${businessIdStr}-phone-`);
-    } catch (error) {
-      console.error("Error invalidating cache:", error);
-      // Continuar mesmo se a invalidação falhar
-    }
-
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Error updating client:", error);
@@ -314,18 +259,6 @@ export async function DELETE(request: NextRequest) {
     if (error) {
       console.error("Error deleting client:", error);
       return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    // Invalidate cache
-    try {
-      invalidateCacheTags([CacheTags.CLIENTS]);
-
-      // Invalidar cache simples
-      const businessIdStr = businessId.toString();
-      invalidateSimpleCache(`clients-${businessIdStr}-phone-`);
-    } catch (error) {
-      console.error("Error invalidating cache:", error);
-      // Continuar mesmo se a invalidação falhar
     }
 
     return NextResponse.json({ success: true });

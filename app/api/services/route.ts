@@ -1,11 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getBusinessId } from "@/lib/business-id";
-import { invalidateCacheTags, CacheTags } from "@/lib/cache-utils";
-import {
-  createSimpleCachedHandler,
-  invalidateSimpleCache,
-} from "@/lib/simple-cache";
 
 // Handler original para GET
 async function getServicesHandler(request: NextRequest) {
@@ -64,23 +59,62 @@ async function getServicesHandler(request: NextRequest) {
   }
 }
 
-// Aplicando cache simples ao handler GET com tempo mais longo (30 minutos)
-export const GET = createSimpleCachedHandler(getServicesHandler, {
-  // Cache por 30 minutos
-  ttl: 1800,
-  // Função personalizada para gerar a chave de cache
-  getCacheKey: (request) => {
-    try {
-      const businessId = request.headers.get("x-business-id") || "";
+// Handler GET sem cache
+export const GET = async (request: NextRequest) => {
+  try {
+    const supabase = await createClient();
+    const { searchParams } = new URL(request.url);
+    const publicBusinessId = searchParams.get("business_id");
 
-      // Criar uma chave de cache baseada no ID do negócio
-      return `services-${businessId}`;
-    } catch (error) {
-      console.error("Error creating cache key:", error);
-      return "services-default";
+    // If business_id is provided in query params, use it (public access)
+    // Otherwise, get from session (authenticated access)
+    let businessId;
+
+    if (publicBusinessId) {
+      businessId = publicBusinessId;
+    } else {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+
+      // Get the business_id using our utility function
+      businessId = await getBusinessId(request);
+      if (!businessId) {
+        return NextResponse.json(
+          { error: "Business not found" },
+          { status: 404 }
+        );
+      }
     }
-  },
-});
+
+    // Execute query
+    const { data, error } = await supabase
+      .from("services")
+      .select("*")
+      .eq("business_id", businessId)
+      .order("name");
+
+    if (error) {
+      console.error("Error fetching services:", error);
+      return NextResponse.json(
+        { error: "Failed to fetch services" },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json(data);
+  } catch (error) {
+    console.error("Error in services API:", error);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
+  }
+};
 
 export async function POST(request: NextRequest) {
   try {
@@ -130,18 +164,6 @@ export async function POST(request: NextRequest) {
     if (error) {
       console.error("Error creating service:", error);
       return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    // Invalidate cache
-    try {
-      invalidateCacheTags([CacheTags.SERVICES]);
-
-      // Invalidar cache simples
-      const businessIdStr = businessId.toString();
-      invalidateSimpleCache(`services-${businessIdStr}`);
-    } catch (error) {
-      console.error("Error invalidating cache:", error);
-      // Continuar mesmo se a invalidação falhar
     }
 
     return NextResponse.json(data[0], { status: 201 });
@@ -204,18 +226,6 @@ export async function PUT(request: NextRequest) {
     if (error) {
       console.error("Error updating service:", error);
       return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    // Invalidate cache
-    try {
-      invalidateCacheTags([CacheTags.SERVICES]);
-
-      // Invalidar cache simples
-      const businessIdStr = businessId.toString();
-      invalidateSimpleCache(`services-${businessIdStr}`);
-    } catch (error) {
-      console.error("Error invalidating cache:", error);
-      // Continuar mesmo se a invalidação falhar
     }
 
     return NextResponse.json({ success: true });
@@ -283,18 +293,6 @@ export async function DELETE(request: NextRequest) {
     if (error) {
       console.error("Error deleting service:", error);
       return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    // Invalidate cache
-    try {
-      invalidateCacheTags([CacheTags.SERVICES]);
-
-      // Invalidar cache simples
-      const businessIdStr = businessId.toString();
-      invalidateSimpleCache(`services-${businessIdStr}`);
-    } catch (error) {
-      console.error("Error invalidating cache:", error);
-      // Continuar mesmo se a invalidação falhar
     }
 
     return NextResponse.json({ success: true });

@@ -3,7 +3,6 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getBusinessId } from "@/lib/business-id";
-import { createSimpleCachedHandler } from "@/lib/simple-cache";
 
 // Interface para a resposta do dashboard
 interface DashboardResponse {
@@ -67,8 +66,8 @@ type RecentAppointment = {
   } | null;
 };
 
-// Handler original para GET
-async function getDashboardHandler(request: NextRequest) {
+// Handler GET sem cache
+export const GET = async (request: NextRequest) => {
   try {
     const supabase = await createClient();
 
@@ -335,30 +334,10 @@ async function getDashboardHandler(request: NextRequest) {
 
     return NextResponse.json(response);
   } catch (error) {
-    console.error("Erro ao buscar dados do dashboard:", error);
+    console.error("Error in GET dashboard:", error);
     return NextResponse.json(
-      { error: "Erro interno do servidor" },
+      { error: "Internal server error" },
       { status: 500 }
     );
   }
-}
-
-// Aplicando cache simples ao handler GET
-export const GET = createSimpleCachedHandler(getDashboardHandler, {
-  // Cache por 5 minutos
-  ttl: 300,
-  // Função personalizada para gerar a chave de cache
-  getCacheKey: (request) => {
-    try {
-      const url = new URL(request.url);
-      const period = url.searchParams.get("period") || "daily";
-      const businessId = request.headers.get("x-business-id") || "";
-
-      // Criar uma chave de cache baseada no período e ID do negócio
-      return `dashboard-${businessId}-${period}`;
-    } catch (error) {
-      console.error("Error creating cache key:", error);
-      return "dashboard-default";
-    }
-  },
-});
+};
