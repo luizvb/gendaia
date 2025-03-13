@@ -27,7 +27,8 @@ export async function middleware(request: NextRequest) {
     request.nextUrl.pathname.startsWith("/api/services") ||
     request.nextUrl.pathname.startsWith("/api/clients") ||
     request.nextUrl.pathname.startsWith("/api/appointments") ||
-    request.nextUrl.pathname.startsWith("/api/demo-chat")
+    request.nextUrl.pathname.startsWith("/api/demo-chat") ||
+    request.nextUrl.pathname.startsWith("/api/aviability")
   ) {
     return NextResponse.next();
   }
