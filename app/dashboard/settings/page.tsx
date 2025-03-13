@@ -3,7 +3,7 @@
 import type React from "react";
 
 import { useState, useEffect, useRef } from "react";
-import { Clock, Save, Upload } from "lucide-react";
+import { Clock, CreditCard, Save, Upload } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,42 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { TimeInput } from "@/components/time-input";
+import { formatPrice } from "@/app/lib/stripe";
+
+const PLANS = [
+  {
+    name: "Basic",
+    description: "Perfect for small businesses",
+    price: 9900, // R$99.00
+    features: [
+      "Up to 100 appointments/month",
+      "Basic analytics",
+      "Email support",
+    ],
+  },
+  {
+    name: "Pro",
+    description: "For growing businesses",
+    price: 19900, // R$199.00
+    features: [
+      "Unlimited appointments",
+      "Advanced analytics",
+      "Priority support",
+      "Custom branding",
+    ],
+  },
+  {
+    name: "Enterprise",
+    description: "For large organizations",
+    price: 39900, // R$399.00
+    features: [
+      "Everything in Pro",
+      "Dedicated account manager",
+      "Custom integrations",
+      "SLA guarantee",
+    ],
+  },
+];
 
 export default function SettingsPage() {
   const [loading, setLoading] = useState(false);
@@ -33,6 +69,7 @@ export default function SettingsPage() {
     description: "",
     logo: "",
   });
+  const [subscription, setSubscription] = useState<any>(null);
 
   // Mapeamento dos dias da semana em inglês para português
   const dayNamesPtBR: Record<string, string> = {
@@ -125,6 +162,22 @@ export default function SettingsPage() {
     }
 
     fetchSettings();
+  }, []);
+
+  // Fetch subscription data
+  useEffect(() => {
+    async function fetchSubscription() {
+      try {
+        const response = await fetch("/api/subscriptions");
+        if (!response.ok) throw new Error("Failed to fetch subscription");
+        const data = await response.json();
+        setSubscription(data);
+      } catch (error) {
+        console.error("Error fetching subscription:", error);
+      }
+    }
+
+    fetchSubscription();
   }, []);
 
   const handleBusinessInfoChange = (
@@ -278,6 +331,49 @@ export default function SettingsPage() {
     }
   };
 
+  const handlePlanSelect = async (planName: string) => {
+    try {
+      setLoading(true);
+      const response = await fetch("/api/subscriptions/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plan: planName }),
+      });
+
+      if (!response.ok) throw new Error("Failed to create checkout session");
+
+      const { url } = await response.json();
+      window.location.href = url;
+    } catch (error) {
+      console.error("Error creating checkout session:", error);
+      toast.error("Failed to process subscription");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCancelSubscription = async () => {
+    if (!confirm("Are you sure you want to cancel your subscription?")) return;
+
+    try {
+      setLoading(true);
+      const response = await fetch("/api/subscriptions/cancel", {
+        method: "POST",
+      });
+
+      if (!response.ok) throw new Error("Failed to cancel subscription");
+
+      const data = await response.json();
+      setSubscription(data);
+      toast.success("Subscription canceled successfully");
+    } catch (error) {
+      console.error("Error canceling subscription:", error);
+      toast.error("Failed to cancel subscription");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -303,6 +399,7 @@ export default function SettingsPage() {
         <TabsList className="mb-4">
           <TabsTrigger value="general">Geral</TabsTrigger>
           <TabsTrigger value="hours">Horários</TabsTrigger>
+          <TabsTrigger value="subscription">Assinatura</TabsTrigger>
         </TabsList>
         <TabsContent value="general">
           <Card>
@@ -496,6 +593,96 @@ export default function SettingsPage() {
                   )}
                 </div>
               ))}
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="subscription">
+          <Card>
+            <CardHeader>
+              <CardTitle>Plano e Assinatura</CardTitle>
+              <CardDescription>
+                Gerencie seu plano e informações de pagamento
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {subscription?.status === "trialing" && (
+                <div className="mb-6 p-4 bg-yellow-50 text-yellow-800 rounded-lg">
+                  <p className="font-medium">Período de teste</p>
+                  <p className="text-sm">
+                    Seu período de teste termina em{" "}
+                    {new Date(subscription.trial_end_date).toLocaleDateString()}
+                  </p>
+                </div>
+              )}
+
+              <div className="grid gap-6 md:grid-cols-3">
+                {PLANS.map((plan) => (
+                  <Card key={plan.name} className="relative">
+                    {subscription?.plan === plan.name.toLowerCase() && (
+                      <div className="absolute -top-2 -right-2 bg-green-500 text-white px-2 py-1 rounded-full text-xs">
+                        Atual
+                      </div>
+                    )}
+                    <CardHeader>
+                      <CardTitle>{plan.name}</CardTitle>
+                      <CardDescription>{plan.description}</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-2xl font-bold mb-4">
+                        {formatPrice(plan.price)}/mês
+                      </p>
+                      <ul className="space-y-2">
+                        {plan.features.map((feature) => (
+                          <li key={feature} className="flex items-center gap-2">
+                            <span className="text-green-500">✓</span>
+                            {feature}
+                          </li>
+                        ))}
+                      </ul>
+                    </CardContent>
+                    <CardContent className="pt-0">
+                      <Button
+                        className="w-full gap-2"
+                        variant={
+                          subscription?.plan === plan.name.toLowerCase()
+                            ? "outline"
+                            : "default"
+                        }
+                        disabled={loading}
+                        onClick={() =>
+                          handlePlanSelect(plan.name.toLowerCase())
+                        }
+                      >
+                        <CreditCard className="h-4 w-4" />
+                        {subscription?.plan === plan.name.toLowerCase()
+                          ? "Gerenciar"
+                          : "Selecionar"}
+                      </Button>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+
+              {subscription?.status === "active" && (
+                <div className="mt-6">
+                  <Separator className="my-6" />
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <h3 className="font-medium">Cancelar assinatura</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Você pode usar o serviço até o fim do período pago
+                      </p>
+                    </div>
+                    <Button
+                      variant="destructive"
+                      disabled={loading}
+                      onClick={handleCancelSubscription}
+                    >
+                      Cancelar assinatura
+                    </Button>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

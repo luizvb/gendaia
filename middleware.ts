@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import type { Database } from "@/types/supabase";
+import { createMiddlewareClient } from "@supabase/auth-helpers-nextjs";
 
 export async function middleware(request: NextRequest) {
   // Check for subdomain
@@ -117,6 +118,31 @@ export async function middleware(request: NextRequest) {
           request: requestWithBusinessId,
         });
       }
+
+      // // Check subscription status if business_id exists
+      // if (profile?.business_id) {
+      //   const { data: subscription } = await supabase
+      //     .from("subscriptions")
+      //     .select("*")
+      //     .eq("business_id", profile.business_id)
+      //     .single();
+
+      //   // If no subscription or trial has ended without active subscription
+      //   if (
+      //     !subscription ||
+      //     (subscription.status === "trialing" &&
+      //       new Date(subscription.trial_end_date) < new Date()) ||
+      //     subscription.status === "canceled" ||
+      //     subscription.status === "incomplete_expired"
+      //   ) {
+      //     // Allow access to settings page to set up subscription
+      //     if (!request.nextUrl.pathname.startsWith("/dashboard/settings")) {
+      //       return NextResponse.redirect(
+      //         new URL("/dashboard/settings", request.url)
+      //       );
+      //     }
+      //   }
+      // }
     } catch (error) {
       console.error("Error fetching business_id in middleware:", error);
     }

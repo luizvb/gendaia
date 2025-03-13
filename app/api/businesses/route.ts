@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { PostgrestError } from "@supabase/supabase-js";
+import { stripe } from "@/app/lib/stripe";
+import { TRIAL_PERIOD_DAYS } from "@/app/lib/stripe";
 
 export async function POST(request: NextRequest) {
   try {
@@ -30,11 +32,22 @@ export async function POST(request: NextRequest) {
 
     const businessData = await request.json();
 
+    // Create Stripe customer
+    const customer = await stripe.customers.create({
+      email: user.email,
+      metadata: {
+        user_id: user.id,
+      },
+    });
+
     // Start a transaction
     const { data: business, error: businessError } = await supabase.rpc(
       "create_business_with_profile",
       {
-        business_data: businessData,
+        business_data: {
+          ...businessData,
+          stripe_customer_id: customer.id,
+        },
         p_user_id: user.id,
       }
     );
@@ -43,6 +56,18 @@ export async function POST(request: NextRequest) {
       console.error("Business creation error:", businessError);
       throw businessError;
     }
+
+    // Create initial subscription record with trial period
+    const trialEndDate = new Date();
+    trialEndDate.setDate(trialEndDate.getDate() + TRIAL_PERIOD_DAYS);
+
+    await supabase.from("subscriptions").insert({
+      business_id: business.id,
+      stripe_customer_id: customer.id,
+      status: "trialing",
+      start_date: new Date().toISOString(),
+      trial_end_date: trialEndDate.toISOString(),
+    });
 
     // Create Vercel subdomain
     try {
