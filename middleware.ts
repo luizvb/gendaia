@@ -7,7 +7,9 @@ export async function middleware(request: NextRequest) {
   const hostname = request.headers.get("host") || "";
   const isSubdomain = hostname.includes(".") && !hostname.startsWith("www.");
 
-  if (isSubdomain) {
+  const isRootPath = request.nextUrl.pathname === "/";
+
+  if (isSubdomain && isRootPath) {
     const url = request.nextUrl.clone();
     url.pathname = "/booking";
     return NextResponse.redirect(url);
@@ -24,7 +26,8 @@ export async function middleware(request: NextRequest) {
     request.nextUrl.pathname.startsWith("/api/professionals") ||
     request.nextUrl.pathname.startsWith("/api/services") ||
     request.nextUrl.pathname.startsWith("/api/clients") ||
-    request.nextUrl.pathname.startsWith("/api/appointments")
+    request.nextUrl.pathname.startsWith("/api/appointments") ||
+    request.nextUrl.pathname.startsWith("/api/demo-chat")
   ) {
     return NextResponse.next();
   }
