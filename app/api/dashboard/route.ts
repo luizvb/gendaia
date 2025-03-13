@@ -15,6 +15,18 @@ interface DashboardResponse {
   };
   recentAppointments: any[];
   professionals: any[]; // Alterado para aceitar qualquer formato de profissionais
+  charts: {
+    dailyStats: Array<{
+      date: string;
+      appointments: number;
+      revenue: number;
+    }>;
+    topServices: Array<{
+      name: string;
+      count: number;
+      percentage: number;
+    }>;
+  };
 }
 
 // Define types for Supabase responses
@@ -307,7 +319,78 @@ export const GET = async (request: NextRequest) => {
       ? Math.round(((totalRevenue - prevTotalRevenue) / prevTotalRevenue) * 100)
       : 0;
 
-    // Prepare response
+    // Get daily stats for the last 30 days
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const { data: dailyStatsData } = await supabase
+      .from("appointments")
+      .select(
+        `
+        start_time,
+        services:service_id (price)
+      `
+      )
+      .eq("business_id", businessId)
+      .gte("start_time", thirtyDaysAgo.toISOString())
+      .lte("start_time", endDateStr);
+
+    // Process daily stats
+    const dailyStats = dailyStatsData?.reduce((acc: any, appointment) => {
+      const date = new Date(appointment.start_time).toISOString().split("T")[0];
+      if (!acc[date]) {
+        acc[date] = { appointments: 0, revenue: 0 };
+      }
+      acc[date].appointments++;
+      acc[date].revenue += appointment.services?.price || 0;
+      return acc;
+    }, {});
+
+    // Convert to array and sort by date
+    const dailyStatsArray = Object.entries(dailyStats || {})
+      .map(([date, stats]: [string, any]) => ({
+        date,
+        ...stats,
+      }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    // Get top services
+    const { data: topServicesData } = await supabase
+      .from("appointments")
+      .select(
+        `
+        services:service_id (
+          id,
+          name
+        )
+      `
+      )
+      .eq("business_id", businessId)
+      .gte("start_time", startDateStr)
+      .lte("start_time", endDateStr);
+
+    // Process top services
+    const servicesCount = topServicesData?.reduce((acc: any, appointment) => {
+      const serviceName = appointment.services?.name || "Desconhecido";
+      acc[serviceName] = (acc[serviceName] || 0) + 1;
+      return acc;
+    }, {});
+
+    const totalServicesCount = Object.values(servicesCount || {}).reduce(
+      (a: any, b: any) => a + b,
+      0
+    );
+
+    const topServices = Object.entries(servicesCount || {})
+      .map(([name, count]: [string, any]) => ({
+        name,
+        count,
+        percentage: Math.round((count / totalServicesCount) * 100),
+      }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+
+    // Prepare response with charts data
     const response: DashboardResponse = {
       period,
       summary: {
@@ -330,6 +413,10 @@ export const GET = async (request: NextRequest) => {
       },
       recentAppointments: recentAppointments || [],
       professionals: professionals,
+      charts: {
+        dailyStats: dailyStatsArray,
+        topServices,
+      },
     };
 
     return NextResponse.json(response);
