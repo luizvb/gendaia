@@ -514,39 +514,45 @@ export function ChatDrawerContent() {
           </div>
         ) : null}
 
-        <form onSubmit={handleSubmit} className="flex gap-2">
+        <form onSubmit={handleSubmit} className="flex flex-col xs:flex-row gap-2">
           <Input
             placeholder="Digite sua mensagem..."
             value={input}
             onChange={(e) => setInput(e.target.value)}
             disabled={isLoading || isRecording || isTranscribing}
-            className={cn(audioBlob ? "opacity-50" : "")}
+            className={cn(audioBlob && "opacity-50")}
           />
-          {!audioBlob && (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={toggleRecording}
-              disabled={isLoading || isTranscribing}
-            >
-              <Mic className="h-4 w-4" />
-            </Button>
-          )}
-          <Button
-            type="submit"
-            disabled={
-              isLoading ||
-              isRecording ||
-              isTranscribing ||
-              (!input.trim() && !audioBlob)
-            }
-          >
-            {isLoading || isTranscribing ? (
-              "Processando..."
-            ) : (
-              <Send className="h-4 w-4" />
+
+          <div className="flex gap-2">
+            {!audioBlob && (
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full xs:w-auto"
+                onClick={toggleRecording}
+                disabled={isLoading || isTranscribing}
+              >
+                <Mic className="h-4 w-4" />
+              </Button>
             )}
-          </Button>
+
+            <Button
+              type="submit"
+              className="w-full xs:w-auto"
+              disabled={
+                isLoading ||
+                isRecording ||
+                isTranscribing ||
+                (!input.trim() && !audioBlob)
+              }
+            >
+              {isLoading || isTranscribing ? (
+                "Processando..."
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
         </form>
       </div>
       <audio ref={audioRef} className="hidden" />
