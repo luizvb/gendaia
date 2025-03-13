@@ -1,21 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
-import {
-  TranscribeClient,
-  StartTranscriptionJobCommand,
-  GetTranscriptionJobCommand,
-} from "@aws-sdk/client-transcribe";
 import { createClient } from "@/lib/supabase/server";
+import { createClient as createDeepgramClient } from "@deepgram/sdk";
 
 // AWS S3 client
 const s3Client = new S3Client({
   region: process.env.AWS_REGION || "us-east-1",
 });
 
-// AWS Transcribe client
-const transcribeClient = new TranscribeClient({
-  region: process.env.AWS_REGION || "us-east-1",
-});
+// Deepgram client
+const deepgram = createDeepgramClient(process.env.DEEPGRAM_API_KEY || "");
 
 export async function POST(request: NextRequest) {
   try {
@@ -45,10 +39,11 @@ export async function POST(request: NextRequest) {
     const filename = `audio-${userId}-${timestamp}.webm`;
     const s3Key = `audio-uploads/${filename}`;
 
-    // Upload to S3
+    // Get audio buffer
     const arrayBuffer = await audioFile.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
+    // Upload to S3 for storage
     await s3Client.send(
       new PutObjectCommand({
         Bucket: process.env.AWS_S3_BUCKET_NAME || "luizai",
@@ -58,61 +53,28 @@ export async function POST(request: NextRequest) {
       })
     );
 
-    // Start transcription job
-    const transcriptionJobName = `transcription-${userId}-${timestamp}`;
-    const s3Uri = `s3://${process.env.AWS_S3_BUCKET_NAME || "luizai"}/${s3Key}`;
-
-    await transcribeClient.send(
-      new StartTranscriptionJobCommand({
-        TranscriptionJobName: transcriptionJobName,
-        Media: { MediaFileUri: s3Uri },
-        LanguageCode: "pt-BR", // Portuguese (Brazil)
-        MediaFormat: "webm",
-      })
+    // Transcribe using Deepgram with direct buffer
+    const { result, error } = await deepgram.listen.prerecorded.transcribeFile(
+      buffer,
+      {
+        model: "nova-2",
+        smart_format: true,
+        language: "pt",
+        mimetype: audioFile.type,
+      }
     );
 
-    // Poll for transcription job completion
-    let transcriptionResult = null;
-    let attempts = 0;
-    const maxAttempts = 30; // Maximum number of polling attempts
-
-    while (attempts < maxAttempts) {
-      const { TranscriptionJob } = await transcribeClient.send(
-        new GetTranscriptionJobCommand({
-          TranscriptionJobName: transcriptionJobName,
-        })
-      );
-
-      if (TranscriptionJob?.TranscriptionJobStatus === "COMPLETED") {
-        // Fetch the transcription result
-        if (TranscriptionJob.Transcript?.TranscriptFileUri) {
-          const response = await fetch(
-            TranscriptionJob.Transcript.TranscriptFileUri
-          );
-          const data = await response.json();
-          transcriptionResult = data.results.transcripts[0].transcript;
-          break;
-        }
-      } else if (TranscriptionJob?.TranscriptionJobStatus === "FAILED") {
-        return NextResponse.json(
-          { error: "Transcription job failed" },
-          { status: 500 }
-        );
-      }
-
-      // Wait before polling again
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      attempts++;
-    }
-
-    if (!transcriptionResult) {
+    if (error) {
+      console.error("Deepgram transcription error:", error);
       return NextResponse.json(
-        { error: "Transcription timed out" },
-        { status: 504 }
+        { error: "Transcription failed" },
+        { status: 500 }
       );
     }
 
-    return NextResponse.json({ text: transcriptionResult });
+    return NextResponse.json({
+      text: result.results?.channels[0]?.alternatives[0]?.transcript || "",
+    });
   } catch (error) {
     console.error("Error transcribing audio:", error);
     return NextResponse.json(
