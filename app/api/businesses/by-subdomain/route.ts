@@ -16,14 +16,15 @@ export async function GET(request: NextRequest) {
     const supabase = await createClient();
 
     // Convert hyphen to space and prepare for case-insensitive search
-    const searchName = subdomain.replace(/-/g, " ");
+    const formattedSearchName = subdomain.replace(/-/g, " ");
 
-    // Get business by subdomain or name
-    console.log("Searching for:", searchName);
+    console.log("Searching for:", formattedSearchName);
     const { data: business, error } = await supabase
       .from("businesses")
       .select("*")
-      .or(`subdomain.ilike.${searchName},name.ilike.${searchName}`)
+      .or(
+        `subdomain.ilike.%${formattedSearchName}%,name.ilike.%${formattedSearchName}%`
+      )
       .single();
 
     if (error) {

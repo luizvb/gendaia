@@ -3,6 +3,16 @@ import { NextResponse, type NextRequest } from "next/server";
 import type { Database } from "@/types/supabase";
 
 export async function middleware(request: NextRequest) {
+  // Check for subdomain
+  const hostname = request.headers.get("host") || "";
+  const isSubdomain = hostname.includes(".") && !hostname.startsWith("www.");
+
+  if (isSubdomain) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/booking";
+    return NextResponse.redirect(url);
+  }
+
   // Permitir acesso às rotas de teste sem autenticação
   if (
     request.nextUrl.pathname.startsWith("/api/test-") ||
@@ -10,7 +20,11 @@ export async function middleware(request: NextRequest) {
     request.nextUrl.pathname.startsWith("/cache-test") ||
     request.nextUrl.pathname.startsWith("/api/business/by-subdomain") ||
     request.nextUrl.pathname.startsWith("/api/businesses/by-subdomain") ||
-    request.nextUrl.pathname.startsWith("/api/chat/whatsapp")
+    request.nextUrl.pathname.startsWith("/api/chat/whatsapp") ||
+    request.nextUrl.pathname.startsWith("/api/professionals") ||
+    request.nextUrl.pathname.startsWith("/api/services") ||
+    request.nextUrl.pathname.startsWith("/api/clients") ||
+    request.nextUrl.pathname.startsWith("/api/appointments")
   ) {
     return NextResponse.next();
   }
