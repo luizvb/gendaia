@@ -37,9 +37,12 @@ import { toast } from "sonner";
 interface Client {
   id: number;
   name: string;
-  email: string;
   phone: string;
   lastVisit?: string;
+  lastMessage?: {
+    content: string;
+    date: string;
+  };
 }
 
 export default function ClientsPage() {
@@ -48,7 +51,6 @@ export default function ClientsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
-    email: "",
     phone: "",
   });
   const [isLoading, setIsLoading] = useState(false);
@@ -72,7 +74,6 @@ export default function ClientsPage() {
   const filteredClients = clients.filter(
     (client) =>
       client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      client.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
       client.phone.includes(searchTerm)
   );
 
@@ -99,7 +100,6 @@ export default function ClientsPage() {
       setIsModalOpen(false);
       setFormData({
         name: "",
-        email: "",
         phone: "",
       });
       fetchClients();
@@ -158,9 +158,9 @@ export default function ClientsPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Nome</TableHead>
-                <TableHead>Email</TableHead>
                 <TableHead>Telefone</TableHead>
                 <TableHead>Última Visita</TableHead>
+                <TableHead>Última Conversa</TableHead>
                 <TableHead className="w-[100px]">Ações</TableHead>
               </TableRow>
             </TableHeader>
@@ -168,9 +168,28 @@ export default function ClientsPage() {
               {filteredClients.map((client) => (
                 <TableRow key={client.id}>
                   <TableCell>{client.name}</TableCell>
-                  <TableCell>{client.email}</TableCell>
                   <TableCell>{client.phone}</TableCell>
-                  <TableCell>{client.lastVisit || "Nunca"}</TableCell>
+                  <TableCell>
+                    {client.lastVisit
+                      ? new Date(client.lastVisit).toLocaleDateString("pt-BR")
+                      : "Nunca"}
+                  </TableCell>
+                  <TableCell>
+                    {client.lastMessage ? (
+                      <div className="max-w-[200px]">
+                        <p className="truncate text-sm">
+                          {client.lastMessage.content}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(client.lastMessage.date).toLocaleDateString(
+                            "pt-BR"
+                          )}
+                        </p>
+                      </div>
+                    ) : (
+                      "Nenhuma"
+                    )}
+                  </TableCell>
                   <TableCell>
                     <Button
                       variant="outline"
@@ -210,16 +229,6 @@ export default function ClientsPage() {
                 id="name"
                 name="name"
                 value={formData.name}
-                onChange={handleInputChange}
-              />
-            </div>
-            <div>
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                name="email"
-                type="email"
-                value={formData.email}
                 onChange={handleInputChange}
               />
             </div>

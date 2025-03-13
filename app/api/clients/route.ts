@@ -29,7 +29,12 @@ export const GET = async (request: NextRequest) => {
     // Base query
     let query = supabase
       .from("clients")
-      .select("*")
+      .select(
+        `
+        *,
+        lastVisit:appointments(created_at)
+      `
+      )
       .eq("business_id", businessId);
 
     // Apply filters if provided
@@ -38,7 +43,7 @@ export const GET = async (request: NextRequest) => {
     }
 
     // Execute query
-    const { data, error } = await query.order("name");
+    const { data: rawData, error } = await query.order("name");
 
     if (error) {
       console.error("Error fetching clients:", error);
@@ -47,6 +52,15 @@ export const GET = async (request: NextRequest) => {
         { status: 500 }
       );
     }
+
+    // Transform the data to match the interface
+    const data = rawData.map((client) => ({
+      id: client.id,
+      name: client.name,
+      phone: client.phone,
+      lastVisit: client.lastVisit?.[0]?.created_at || null,
+      lastMessage: null,
+    }));
 
     return NextResponse.json(data);
   } catch (error) {
