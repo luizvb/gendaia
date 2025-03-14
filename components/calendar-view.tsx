@@ -384,7 +384,7 @@ export function CalendarView() {
     const slots: Date[] = [];
 
     // Default business hours if none are configured
-    const defaultOpenHour = 8; // Changed from 9 to 8
+    const defaultOpenHour = 9; // Changed from 9 to 8
     const defaultCloseHour = 18; // Changed from 19 to 18
 
     // For each day in the view
