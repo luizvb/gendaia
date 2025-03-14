@@ -652,7 +652,44 @@ export async function handleCreateAppointment(
 
   // Calculate appointment times
   const startTime = new Date(`${date}T${input.time}`);
+  if (isNaN(startTime.getTime())) {
+    throw new Error("Formato de horário inválido. Use o formato HH:mm");
+  }
+
   const endTime = new Date(startTime.getTime() + serviceDuration * 60000);
+
+  // Validate business hours
+  if (!isWithinBusinessHours(startTime, endTime)) {
+    throw new Error("O horário está fora do horário comercial");
+  }
+
+  // Check for conflicts
+  const { data: existingAppointments, error: conflictError } = await supabase
+    .from("appointments")
+    .select("start_time, end_time")
+    .eq("professional_id", professionalId)
+    .eq("business_id", businessId)
+    .gte("start_time", `${date}T00:00:00`)
+    .lt("start_time", `${date}T23:59:59`);
+
+  if (conflictError) {
+    throw new Error(`Erro ao verificar conflitos: ${conflictError.message}`);
+  }
+
+  // Check for overlapping appointments
+  const hasConflict = existingAppointments?.some((appointment) => {
+    const appointmentStart = new Date(appointment.start_time);
+    const appointmentEnd = new Date(appointment.end_time);
+    return (
+      (startTime < appointmentEnd && endTime > appointmentStart) ||
+      startTime.getTime() === appointmentStart.getTime() ||
+      endTime.getTime() === appointmentEnd.getTime()
+    );
+  });
+
+  if (hasConflict) {
+    throw new Error("Este horário já está ocupado para este profissional");
+  }
 
   // Create appointment
   const { data: appointment, error: createError } = await supabase
