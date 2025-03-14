@@ -37,6 +37,20 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 // Constante para o nome da chave no localStorage
 const PHONE_STORAGE_KEY = "barbershop_user_phone";
 
+interface Service {
+  id: string;
+  name: string;
+  duration: number;
+  price: number;
+}
+
+interface Professional {
+  id: string;
+  name: string;
+  color: string;
+  business_id: string;
+}
+
 export default function BookingPage() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState("new");
@@ -49,13 +63,18 @@ export default function BookingPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [services, setServices] = useState<any[]>([]);
-  const [professionals, setProfessionals] = useState<any[]>([]);
+  const [services, setServices] = useState<Service[]>([]);
+  const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [appointments, setAppointments] = useState<any[]>([]);
   const [timeSlots, setTimeSlots] = useState<string[]>([]);
   const [loadingAppointments, setLoadingAppointments] = useState(false);
   const [business, setBusiness] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [professionalsAvailability, setProfessionalsAvailability] = useState<{
+    [professionalId: string]: {
+      [date: string]: string[];
+    };
+  }>({});
 
   // Carregar telefone do localStorage ao iniciar
   useEffect(() => {
@@ -168,6 +187,36 @@ export default function BookingPage() {
       if (professionalsData.length > 0) {
         setProfessional(professionalsData[0].id);
       }
+
+      // Fetch availability for the next 7 days for all professionals
+      const availabilityData: {
+        [professionalId: string]: {
+          [date: string]: string[];
+        };
+      } = {};
+
+      // Get next 7 days
+      const dates = Array.from({ length: 7 }, (_, i) => {
+        const date = new Date();
+        date.setDate(date.getDate() + i);
+        return format(date, "yyyy-MM-dd");
+      });
+
+      // Fetch availability for each professional and date
+      for (const prof of professionalsData) {
+        availabilityData[prof.id] = {};
+        for (const date of dates) {
+          const availabilityResponse = await fetch(
+            `/api/availability?professional_id=${prof.id}&date=${date}&service_duration=15`
+          );
+          if (availabilityResponse.ok) {
+            const { available_slots } = await availabilityResponse.json();
+            availabilityData[prof.id][date] = available_slots;
+          }
+        }
+      }
+
+      setProfessionalsAvailability(availabilityData);
     } catch (err) {
       console.error("Error fetching data:", err);
       setError(err instanceof Error ? err.message : "Unknown error");
@@ -188,6 +237,55 @@ export default function BookingPage() {
       }
 
       const formattedDate = format(date, "yyyy-MM-dd");
+
+      // Check if we have pre-fetched availability data
+      if (
+        professionalsAvailability &&
+        Object.keys(professionalsAvailability).length > 0
+      ) {
+        // Get all available 15-minute slots
+        const allAvailableSlots =
+          professionalsAvailability[professional]?.[formattedDate] || [];
+
+        // Filter slots based on service duration
+        const serviceDurationInMinutes = selectedService.duration;
+        const requiredConsecutiveSlots = Math.ceil(
+          serviceDurationInMinutes / 15
+        );
+
+        // Only keep slots that have enough consecutive slots available after them
+        const validSlots = allAvailableSlots.filter((slot) => {
+          // If we only need one slot (15 min service), this slot is valid
+          if (requiredConsecutiveSlots === 1) return true;
+
+          // For longer services, check if we have enough consecutive slots
+          const [hours, minutes] = slot.split(":").map(Number);
+          const slotTime = new Date(0, 0, 0, hours, minutes);
+
+          // Check if we have enough consecutive slots
+          for (let i = 1; i < requiredConsecutiveSlots; i++) {
+            // Calculate the next slot time (current + i*15 minutes)
+            const nextSlotTime = new Date(slotTime);
+            nextSlotTime.setMinutes(nextSlotTime.getMinutes() + i * 15);
+
+            // Format to HH:mm for comparison
+            const nextSlotFormatted = format(nextSlotTime, "HH:mm");
+
+            // If the next required slot is not available, this starting slot is not valid
+            if (!allAvailableSlots.includes(nextSlotFormatted)) {
+              return false;
+            }
+          }
+
+          // If we got here, all required consecutive slots are available
+          return true;
+        });
+
+        setTimeSlots(validSlots);
+        return;
+      }
+
+      // Fall back to API call if pre-fetched data is not available
       const response = await fetch(
         `/api/availability?professional_id=${professional}&date=${formattedDate}&service_duration=${selectedService.duration}`
       );
@@ -206,12 +304,14 @@ export default function BookingPage() {
   };
 
   const fetchAppointments = async (phoneNumber: string) => {
-    if (!phoneNumber) return;
+    if (!phoneNumber || !business?.id) return;
 
     setLoadingAppointments(true);
     try {
       const response = await fetch(
-        `/api/appointments?phone=${encodeURIComponent(phoneNumber)}`
+        `/api/appointments?phone=${encodeURIComponent(
+          phoneNumber
+        )}&business_id=${business.id}`
       );
       const data = await response.json();
       setAppointments(data);

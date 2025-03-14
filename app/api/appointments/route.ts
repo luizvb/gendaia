@@ -7,19 +7,28 @@ import { format } from "date-fns";
 export const GET = async (request: NextRequest) => {
   try {
     const supabase = await createClient();
-
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     const { searchParams } = new URL(request.url);
     const phone = searchParams.get("phone");
+    const businessIdFromQuery = searchParams.get("business_id");
 
-    // Get the business_id using our utility function
-    const businessId = await getBusinessId(request);
+    let businessId: string | null = null;
+
+    // If business_id is provided in query, use it directly
+    if (businessIdFromQuery) {
+      businessId = businessIdFromQuery;
+    } else {
+      // Otherwise check auth and get business_id from session
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+
+      // Get the business_id using our utility function
+      businessId = await getBusinessId(request);
+    }
+
     if (!businessId) {
       return NextResponse.json(
         { error: "Business not found" },
