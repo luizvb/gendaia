@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { format, addDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Calendar, Phone, User } from "lucide-react";
+import { formatInTimeZone, toDate } from "date-fns-tz";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -236,7 +237,8 @@ export default function BookingPage() {
         return;
       }
 
-      const formattedDate = format(date, "yyyy-MM-dd");
+      const spTimeZone = "America/Sao_Paulo";
+      const formattedDate = formatInTimeZone(date, spTimeZone, "yyyy-MM-dd");
 
       // Check if we have pre-fetched availability data
       if (
@@ -260,12 +262,13 @@ export default function BookingPage() {
 
           // For longer services, check if we have enough consecutive slots
           const [hours, minutes] = slot.split(":").map(Number);
-          const slotTime = new Date(0, 0, 0, hours, minutes);
+          const baseDate = new Date(date);
+          baseDate.setHours(hours, minutes, 0, 0);
 
           // Check if we have enough consecutive slots
           for (let i = 1; i < requiredConsecutiveSlots; i++) {
             // Calculate the next slot time (current + i*15 minutes)
-            const nextSlotTime = new Date(slotTime);
+            const nextSlotTime = new Date(baseDate);
             nextSlotTime.setMinutes(nextSlotTime.getMinutes() + i * 15);
 
             // Format to HH:mm for comparison
@@ -345,11 +348,25 @@ export default function BookingPage() {
       const duration = selectedService?.duration || 30;
 
       const [hours, minutes] = time.split(":").map(Number);
-      const startTime = new Date(date);
-      startTime.setHours(hours, minutes, 0, 0);
+      const spTimeZone = "America/Sao_Paulo";
 
-      const endTime = new Date(startTime);
+      // Create base date with the selected time
+      const baseDate = new Date(date);
+      baseDate.setHours(hours, minutes, 0, 0);
+
+      // Format dates in the correct timezone
+      const startTimeISO = formatInTimeZone(
+        baseDate,
+        spTimeZone,
+        "yyyy-MM-dd'T'HH:mm:ssXXX"
+      );
+      const endTime = new Date(baseDate);
       endTime.setMinutes(endTime.getMinutes() + duration);
+      const endTimeISO = formatInTimeZone(
+        endTime,
+        spTimeZone,
+        "yyyy-MM-dd'T'HH:mm:ssXXX"
+      );
 
       // Enviar agendamento para a API
       const response = await fetch("/api/appointments", {
@@ -360,8 +377,8 @@ export default function BookingPage() {
         body: JSON.stringify({
           client_name: name,
           client_phone: phone,
-          start_time: startTime.toISOString(),
-          end_time: endTime.toISOString(),
+          start_time: startTimeISO,
+          end_time: endTimeISO,
           professional_id: professional,
           service_id: service,
           business_id: business.id,

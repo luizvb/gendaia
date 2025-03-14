@@ -116,7 +116,6 @@ export async function middleware(request: NextRequest) {
 
         // If no subscription or trial has ended without active subscription
 
-        console.log(subscription);
         if (
           (subscription &&
             subscription.status === "trialing" &&
