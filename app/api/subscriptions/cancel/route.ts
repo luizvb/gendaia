@@ -30,17 +30,17 @@ export async function POST(request: NextRequest) {
       .eq("business_id", businessId)
       .single();
 
-    if (!subscription?.stripe_subscription_id) {
-      return NextResponse.json(
-        { error: "No active subscription found" },
-        { status: 400 }
-      );
-    }
+    // if (!subscription?.stripe_subscription_id) {
+    //   return NextResponse.json(
+    //     { error: "No active subscription found" },
+    //     { status: 400 }
+    //   );
+    // }
 
-    // Cancel subscription at period end
-    await stripe.subscriptions.update(subscription.stripe_subscription_id, {
-      cancel_at_period_end: true,
-    });
+    // // Cancel subscription at period end
+    // await stripe.subscriptions.update(subscription.stripe_subscription_id, {
+    //   cancel_at_period_end: true,
+    // });
 
     // Update subscription status
     const { data: updatedSubscription } = await supabase

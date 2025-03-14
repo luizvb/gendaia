@@ -1,8 +1,9 @@
 "use client";
 
 import type React from "react";
-
-import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
@@ -15,40 +16,50 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { OnboardingSteps } from "@/components/onboarding-steps";
+
+const businessSchema = z.object({
+  name: z.string().min(2, "Nome deve ter pelo menos 2 caracteres"),
+  description: z.string().optional(),
+  address: z.string().min(5, "Endereço deve ter pelo menos 5 caracteres"),
+  phone: z
+    .string()
+    .regex(/^\(\d{2}\)\s\d{4,5}-\d{4}$/, "Formato: (99) 99999-9999"),
+  email: z.string().email("Email inválido").optional(),
+});
+
+type BusinessForm = z.infer<typeof businessSchema>;
 
 export default function OnboardingPage() {
   const router = useRouter();
-  const [isLoading, setIsLoading] = useState(false);
-  const [formData, setFormData] = useState({
-    name: "",
-    description: "",
-    address: "",
-    phone: "",
-    email: "",
+  const form = useForm<BusinessForm>({
+    resolver: zodResolver(businessSchema),
+    defaultValues: {
+      name: "",
+      description: "",
+      address: "",
+      phone: "",
+      email: "",
+    },
   });
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-
+  const onSubmit = async (data: BusinessForm) => {
     try {
       const response = await fetch("/api/businesses", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(data),
       });
 
       if (!response.ok) {
@@ -56,15 +67,12 @@ export default function OnboardingPage() {
         throw new Error(error.message || "Erro ao criar organização");
       }
 
-      // Redirecionar para a próxima etapa
       router.push("/onboarding/plan");
     } catch (error) {
       console.error("Erro ao criar organização:", error);
       toast.error(
         error instanceof Error ? error.message : "Erro ao criar organização"
       );
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -82,69 +90,113 @@ export default function OnboardingPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Nome do negócio</Label>
-              <Input
-                id="name"
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <FormField
+                control={form.control}
                 name="name"
-                placeholder="Ex: Dr. João da Silva, Estética, Barbearia"
-                value={formData.name}
-                onChange={handleInputChange}
-                required
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Nome do negócio</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="Ex: Dr. João da Silva, Estética, Barbearia"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="description">Descrição</Label>
-              <Input
-                id="description"
+
+              <FormField
+                control={form.control}
                 name="description"
-                placeholder="Ex: Especialidade em atendimento ao cliente"
-                value={formData.description}
-                onChange={handleInputChange}
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Descrição</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="Ex: Especialidade em atendimento ao cliente"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="address">Endereço</Label>
-              <Input
-                id="address"
+
+              <FormField
+                control={form.control}
                 name="address"
-                placeholder="Ex: Rua Exemplo, 123 - Centro"
-                value={formData.address}
-                onChange={handleInputChange}
-                required
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Endereço</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="Ex: Rua Exemplo, 123 - Centro"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="phone">Telefone</Label>
-              <Input
-                id="phone"
+
+              <FormField
+                control={form.control}
                 name="phone"
-                placeholder="Ex: (11) 99999-9999"
-                value={formData.phone}
-                onChange={handleInputChange}
-                required
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Telefone</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="Ex: (11) 99999-9999"
+                        {...field}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          const formatted = value
+                            .replace(/\D/g, "")
+                            .replace(/^(\d{2})(\d)/g, "($1) $2")
+                            .replace(/(\d)(\d{4})$/, "$1-$2");
+                          field.onChange(formatted);
+                        }}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
+
+              <FormField
+                control={form.control}
                 name="email"
-                type="email"
-                placeholder="Ex: contato@gendaia.com"
-                value={formData.email}
-                onChange={handleInputChange}
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="email"
+                        placeholder="Ex: contato@gendaia.com"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
-            </div>
-          </form>
+            </form>
+          </Form>
         </CardContent>
         <CardFooter className="flex justify-between">
           <Button variant="outline" onClick={() => router.push("/login")}>
             Voltar
           </Button>
-          <Button onClick={handleSubmit} disabled={isLoading}>
-            {isLoading ? "Criando..." : "Continuar"}
+          <Button
+            onClick={form.handleSubmit(onSubmit)}
+            disabled={form.formState.isSubmitting}
+          >
+            {form.formState.isSubmitting ? "Criando..." : "Continuar"}
           </Button>
         </CardFooter>
       </Card>

@@ -17,20 +17,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // Permitir acesso às rotas de teste sem autenticação
-  if (
-    request.nextUrl.pathname.startsWith("/api/test-") ||
-    request.nextUrl.pathname.startsWith("/api/clear-cache") ||
-    request.nextUrl.pathname.startsWith("/cache-test") ||
-    request.nextUrl.pathname.startsWith("/api/business/by-subdomain") ||
-    request.nextUrl.pathname.startsWith("/api/businesses/by-subdomain") ||
-    request.nextUrl.pathname.startsWith("/api/chat/whatsapp") ||
-    request.nextUrl.pathname.startsWith("/api/professionals") ||
-    request.nextUrl.pathname.startsWith("/api/services") ||
-    request.nextUrl.pathname.startsWith("/api/clients") ||
-    request.nextUrl.pathname.startsWith("/api/appointments") ||
-    request.nextUrl.pathname.startsWith("/api/demo-chat") ||
-    request.nextUrl.pathname.startsWith("/api/availability")
-  ) {
+  if (request.nextUrl.pathname.startsWith("/api")) {
     return NextResponse.next();
   }
 
@@ -119,30 +106,32 @@ export async function middleware(request: NextRequest) {
         });
       }
 
-      // // Check subscription status if business_id exists
-      // if (profile?.business_id) {
-      //   const { data: subscription } = await supabase
-      //     .from("subscriptions")
-      //     .select("*")
-      //     .eq("business_id", profile.business_id)
-      //     .single();
+      // Check subscription status if business_id exists
+      if (profile?.business_id) {
+        const { data: subscription } = await supabase
+          .from("subscriptions")
+          .select("*")
+          .eq("business_id", profile.business_id)
+          .single();
 
-      //   // If no subscription or trial has ended without active subscription
-      //   if (
-      //     !subscription ||
-      //     (subscription.status === "trialing" &&
-      //       new Date(subscription.trial_end_date) < new Date()) ||
-      //     subscription.status === "canceled" ||
-      //     subscription.status === "incomplete_expired"
-      //   ) {
-      //     // Allow access to settings page to set up subscription
-      //     if (!request.nextUrl.pathname.startsWith("/dashboard/settings")) {
-      //       return NextResponse.redirect(
-      //         new URL("/dashboard/settings", request.url)
-      //       );
-      //     }
-      //   }
-      // }
+        // If no subscription or trial has ended without active subscription
+
+        console.log(subscription);
+        if (
+          (subscription &&
+            subscription.status === "trialing" &&
+            new Date(subscription.trial_end_date) < new Date()) ||
+          subscription.status === "canceled" ||
+          subscription.status === "incomplete_expired"
+        ) {
+          // Allow access to settings page to set up subscription
+          if (!request.nextUrl.pathname.startsWith("/dashboard/subscription")) {
+            return NextResponse.redirect(
+              new URL("/dashboard/subscription", request.url)
+            );
+          }
+        }
+      }
     } catch (error) {
       console.error("Error fetching business_id in middleware:", error);
     }

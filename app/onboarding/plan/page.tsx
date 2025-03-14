@@ -2,7 +2,10 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Info } from "lucide-react";
+import Script from "next/script";
+import { Info, Check } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -14,193 +17,153 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { OnboardingSteps } from "@/components/onboarding-steps";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Label } from "@/components/ui/label";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 
-const plans = [
-  {
-    id: "starter",
-    name: "Starter",
-    price: "R$ 49,90",
-    description: "Ideal para barbearias pequenas",
-    features: [
-      "Até 2 profissionais",
-      "Agendamento online",
-      "Gerenciamento de clientes",
-      "Relatórios básicos",
-    ],
-  },
-  {
-    id: "professional",
-    name: "Professional",
-    price: "R$ 99,90",
-    description: "Para barbearias em crescimento",
-    features: [
-      "Até 5 profissionais",
-      "Agendamento online",
-      "Gerenciamento de clientes",
-      "Relatórios avançados",
-      "Lembretes por SMS",
-      "Personalização da agenda",
-    ],
-    recommended: true,
-  },
-  {
-    id: "business",
-    name: "Business",
-    price: "R$ 199,90",
-    description: "Para redes de barbearias",
-    features: [
-      "Profissionais ilimitados",
-      "Múltiplas unidades",
-      "Agendamento online",
-      "Gerenciamento de clientes",
-      "Relatórios avançados",
-      "Lembretes por SMS e Email",
-      "Personalização completa",
-      "API para integração",
-    ],
-  },
+declare global {
+  namespace JSX {
+    interface IntrinsicElements {
+      "stripe-pricing-table": React.DetailedHTMLProps<
+        React.HTMLAttributes<HTMLElement> & {
+          "pricing-table-id": string;
+          "publishable-key": string;
+        },
+        HTMLElement
+      >;
+    }
+  }
+}
+
+const trialFeatures = [
+  "Profissionais ilimitados",
+  "Múltiplas unidades",
+  "Agendamento online",
+  "Gerenciamento de clientes",
+  "Relatórios avançados",
+  "Lembretes por SMS e Email",
+  "Personalização completa",
+  "API para integração",
 ];
 
 export default function PlanSelectionPage() {
   const router = useRouter();
-  const [selectedPlan, setSelectedPlan] = useState("professional");
   const [isLoading, setIsLoading] = useState(false);
+  const [selectedTab, setSelectedTab] = useState<"trial" | "payment">("trial");
 
   const handleSubmit = async () => {
     setIsLoading(true);
 
     try {
-      // Simulação de seleção de plano
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      const response = await fetch("/api/subscriptions/trial", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          planId: "business",
+        }),
+      });
 
-      // Redirecionar para a próxima etapa
+      console.log(response);
+
+      const data = await response.json();
+      console.log(data);
+
+      if (!response.ok) {
+        throw new Error(data.error || "Erro ao criar assinatura");
+      }
+
+      toast.success("Período de teste iniciado com sucesso!");
       router.push("/onboarding/success");
     } catch (error) {
-      console.error("Erro ao selecionar plano:", error);
+      console.error("Erro ao iniciar trial:", error);
+      toast.error("Erro ao iniciar período de teste. Tente novamente.");
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="mx-auto w-full max-w-3xl">
-      <OnboardingSteps currentStep={2} />
+    <>
+      <Script async src="https://js.stripe.com/v3/pricing-table.js" />
+      <div className="mx-auto w-full max-w-3xl">
+        <OnboardingSteps currentStep={2} />
 
-      <Card className="mt-8">
-        <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl font-bold">
-            Escolha seu Plano
-          </CardTitle>
-          <CardDescription>
-            Selecione o plano que melhor atende às necessidades da sua GENDAIA.
-            Todos os planos incluem um período de teste gratuito de 7 dias.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="mb-6 rounded-lg bg-primary/10 p-4 text-sm">
-            <div className="flex items-center gap-2">
-              <Info className="h-5 w-5 text-primary" />
-              <p className="font-medium text-primary">
-                Experimente grátis por 7 dias
-              </p>
-            </div>
-            <p className="mt-1 text-muted-foreground">
-              Todos os planos incluem um período de teste gratuito de 7 dias.
-              Você não será cobrado até o final do período de teste.
-            </p>
-          </div>
-
-          <RadioGroup
-            value={selectedPlan}
-            onValueChange={setSelectedPlan}
-            className="grid gap-4 md:grid-cols-3"
-          >
-            {plans.map((plan) => (
-              <Label
-                key={plan.id}
-                htmlFor={plan.id}
-                className={`flex cursor-pointer flex-col rounded-lg border p-4 ${
-                  selectedPlan === plan.id
-                    ? "border-primary bg-primary/5"
-                    : "border-border hover:bg-muted/50"
-                } ${plan.recommended ? "relative" : ""}`}
-              >
-                {plan.recommended && (
-                  <div className="absolute -top-2 right-4 rounded-full bg-primary px-2 py-0.5 text-xs font-medium text-primary-foreground">
-                    Recomendado
+        <Card className="mt-8">
+          <CardHeader className="space-y-1">
+            <CardTitle className="text-2xl font-bold">
+              Escolha como começar
+            </CardTitle>
+            <CardDescription>
+              Comece gratuitamente ou escolha um plano pago agora.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Tabs
+              defaultValue="trial"
+              className="w-full"
+              onValueChange={(value) =>
+                setSelectedTab(value as "trial" | "payment")
+              }
+            >
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="trial">Começar Grátis</TabsTrigger>
+                <TabsTrigger value="payment">Pagar Agora</TabsTrigger>
+              </TabsList>
+              <TabsContent value="trial">
+                <div className="rounded-lg border border-primary bg-primary/5 p-6">
+                  <div className="flex items-center gap-2">
+                    <Info className="h-5 w-5 text-primary" />
+                    <h3 className="font-medium text-primary">
+                      7 dias grátis com acesso completo
+                    </h3>
                   </div>
-                )}
-                <div className="flex items-start space-x-2">
-                  <RadioGroupItem
-                    value={plan.id}
-                    id={plan.id}
-                    className="mt-1"
-                  />
-                  <div className="space-y-2">
-                    <div className="space-y-1">
-                      <h3 className="font-medium">{plan.name}</h3>
-                      <p className="text-sm text-muted-foreground">
-                        {plan.description}
-                      </p>
-                    </div>
-                    <div className="text-xl font-bold">
-                      {plan.price}
-                      <span className="text-sm font-normal text-muted-foreground">
-                        {" "}
-                        /mês
-                      </span>
-                    </div>
-                    <div className="mt-1 rounded-full bg-green-100 px-2 py-1 text-xs font-medium text-green-800 inline-block">
-                      7 dias de teste grátis
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <span className="text-xs font-medium text-primary">
-                        7 dias grátis
-                      </span>
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Info className="h-3 w-3 text-muted-foreground" />
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p className="text-xs">
-                              Você não será cobrado durante o período de teste
-                            </p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    </div>
-                    <ul className="space-y-2 text-sm">
-                      {plan.features.map((feature, index) => (
-                        <li key={index} className="flex items-center">
-                          <Check className="mr-2 h-4 w-4 text-primary" />
-                          {feature}
-                        </li>
-                      ))}
-                    </ul>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Experimente todas as funcionalidades da plataforma
+                    gratuitamente por 7 dias. Você não será cobrado durante o
+                    período de teste e pode cancelar a qualquer momento.
+                  </p>
+                  <div className="mt-6 grid gap-4 md:grid-cols-2">
+                    {trialFeatures.map((feature, index) => (
+                      <div key={index} className="flex items-center gap-2">
+                        <Check className="h-4 w-4 text-primary" />
+                        <span className="text-sm">{feature}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-6 rounded-lg bg-background p-4">
+                    <p className="text-sm font-medium">
+                      O que acontece depois dos 7 dias?
+                    </p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Após o período de teste, você poderá escolher o plano que
+                      melhor atende às suas necessidades. Não se preocupe,
+                      enviaremos um lembrete antes do fim do período de teste.
+                    </p>
                   </div>
                 </div>
-              </Label>
-            ))}
-          </RadioGroup>
-        </CardContent>
-        <CardFooter className="flex justify-between">
-          <Button variant="outline" onClick={() => router.push("/onboarding")}>
-            Voltar
-          </Button>
-          <Button onClick={handleSubmit} disabled={isLoading}>
-            {isLoading ? "Processando..." : "Iniciar período de teste gratuito"}
-          </Button>
-        </CardFooter>
-      </Card>
-    </div>
+              </TabsContent>
+              <TabsContent value="payment" className="w-full">
+                <stripe-pricing-table
+                  pricing-table-id="prctbl_1R2Mu7KD7xVMZWERMkMCALzA"
+                  publishable-key="pk_test_51QunOZKD7xVMZWERWzwJ173Y6r5oFhexgoflL4m6npRQoS9ogiw5ivuA9Pl6BmeEpMneHojRcPvX7M8zWPBkMiwD00Kflba83I"
+                ></stripe-pricing-table>
+              </TabsContent>
+            </Tabs>
+          </CardContent>
+          <CardFooter className="flex justify-between">
+            <Button
+              variant="outline"
+              onClick={() => router.push("/onboarding")}
+            >
+              Voltar
+            </Button>
+            {selectedTab === "trial" && (
+              <Button onClick={handleSubmit} disabled={isLoading}>
+                {isLoading ? "Processando..." : "Começar período gratuito"}
+              </Button>
+            )}
+          </CardFooter>
+        </Card>
+      </div>
+    </>
   );
 }

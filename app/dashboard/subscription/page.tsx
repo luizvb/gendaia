@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Check, CreditCard, Calendar } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,37 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
+interface Subscription {
+  id: string;
+  business_id: string;
+  plan: string;
+  status: "trialing" | "active" | "canceled" | "past_due";
+  start_date: string;
+  end_date: string | null;
+  trial_end_date: string | null;
+  stripe_subscription_id: string | null;
+  created_at: string;
+  updated_at: string;
+  email: string;
+}
+
+declare global {
+  namespace JSX {
+    interface IntrinsicElements {
+      "stripe-pricing-table": React.DetailedHTMLProps<
+        React.HTMLAttributes<HTMLElement> & {
+          "pricing-table-id": string;
+          "publishable-key": string;
+          "client-reference-id"?: string;
+          "customer-email"?: string;
+          appearance?: string;
+        },
+        HTMLElement
+      >;
+    }
+  }
+}
 
 const plans = [
   {
@@ -63,18 +94,113 @@ const plans = [
   },
 ];
 
+const StripePricingTable = ({
+  businessId,
+  email,
+}: {
+  businessId: string;
+  email: string;
+}) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    // Check if script already exists
+    const existingScript = document.querySelector(
+      'script[src="https://js.stripe.com/v3/pricing-table.js"]'
+    );
+
+    if (!existingScript) {
+      // Add script to head only if it doesn't exist
+      const script = document.createElement("script");
+      script.src = "https://js.stripe.com/v3/pricing-table.js";
+      script.async = true;
+      script.onload = () => {
+        if (containerRef.current) {
+          const table = document.createElement("stripe-pricing-table");
+          table.setAttribute(
+            "pricing-table-id",
+            "prctbl_1R2Mu7KD7xVMZWERMkMCALzA"
+          );
+          table.setAttribute(
+            "publishable-key",
+            "pk_test_51QunOZKD7xVMZWERWzwJ173Y6r5oFhexgoflL4m6npRQoS9ogiw5ivuA9Pl6BmeEpMneHojRcPvX7M8zWPBkMiwD00Kflba83I"
+          );
+          table.setAttribute("client-reference-id", businessId);
+          table.setAttribute("customer-email", email);
+          table.setAttribute("appearance", "dark");
+          containerRef.current.appendChild(table);
+        }
+      };
+      document.head.appendChild(script);
+    } else {
+      // If script already exists, create table immediately
+      if (containerRef.current) {
+        const table = document.createElement("stripe-pricing-table");
+        table.setAttribute(
+          "pricing-table-id",
+          "prctbl_1R2Mu7KD7xVMZWERMkMCALzA"
+        );
+        table.setAttribute(
+          "publishable-key",
+          "pk_test_51QunOZKD7xVMZWERWzwJ173Y6r5oFhexgoflL4m6npRQoS9ogiw5ivuA9Pl6BmeEpMneHojRcPvX7M8zWPBkMiwD00Kflba83I"
+        );
+        table.setAttribute("client-reference-id", businessId);
+        table.setAttribute("customer-email", email);
+        table.setAttribute("appearance", "dark");
+        containerRef.current.appendChild(table);
+      }
+    }
+
+    return () => {
+      // Cleanup table on unmount
+      if (containerRef.current) {
+        containerRef.current.innerHTML = "";
+      }
+    };
+  }, [businessId, email]);
+
+  return <div ref={containerRef} className="stripe-pricing-table" />;
+};
+
 export default function SubscriptionPage() {
   const [selectedPlan, setSelectedPlan] = useState("professional");
   const [activeTab, setActiveTab] = useState("plan");
+  const [subscription, setSubscription] = useState<Subscription | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  // Calcular a data de término do período de teste (7 dias a partir de hoje)
-  const trialEndDate = new Date();
-  trialEndDate.setDate(trialEndDate.getDate() + 7);
-  const formattedTrialEndDate = trialEndDate.toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
+  // Calculate days remaining in trial if in trial period
+  const getDaysRemaining = () => {
+    if (!subscription?.trial_end_date) return 0;
+    const trialEnd = new Date(subscription.trial_end_date);
+    const now = new Date();
+    const diffTime = trialEnd.getTime() - now.getTime();
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  };
+
+  const daysRemaining = getDaysRemaining();
+  const isTrialActive =
+    subscription?.status === "trialing" && daysRemaining > 0;
+
+  useEffect(() => {
+    async function fetchSubscription() {
+      try {
+        const response = await fetch("/api/subscriptions");
+        const data = await response.json();
+        setSubscription(data[0]); // Get the most recent subscription
+      } catch (error) {
+        console.error("Error fetching subscription:", error);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchSubscription();
+  }, []);
+
+  const formatDate = (dateString: string | null) => {
+    if (!dateString) return "";
+    return new Date(dateString).toLocaleDateString("pt-BR");
+  };
 
   return (
     <div className="space-y-6">
@@ -85,197 +211,85 @@ export default function SubscriptionPage() {
         </p>
       </div>
 
-      <Card className="bg-primary/5 border-primary/20">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Calendar className="h-5 w-5 text-primary" />
-            Período de Teste Gratuito
-          </CardTitle>
-          <CardDescription>
-            Você está atualmente no período de teste gratuito do plano
-            Professional
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm">
-            Seu período de teste termina em{" "}
-            <span className="font-medium">{formattedTrialEndDate}</span>. Após
-            esse período, você será cobrado automaticamente pelo plano
-            selecionado.
-          </p>
-        </CardContent>
-        <CardFooter>
-          <Button variant="outline" size="sm">
-            Cancelar Teste
-          </Button>
-        </CardFooter>
-      </Card>
-
-      <Tabs defaultValue="plan" onValueChange={setActiveTab}>
-        <TabsList>
-          <TabsTrigger value="plan">Plano</TabsTrigger>
-          <TabsTrigger value="billing">Faturamento</TabsTrigger>
-        </TabsList>
-        <TabsContent value="plan" className="space-y-4 pt-4">
-          <Card>
+      {loading ? (
+        <div>Carregando...</div>
+      ) : isTrialActive && subscription ? (
+        <>
+          <Card className="bg-primary/5 border-primary/20">
             <CardHeader>
-              <CardTitle>Plano Atual</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <Calendar className="h-5 w-5 text-primary" />
+                Período de Teste Gratuito
+              </CardTitle>
               <CardDescription>
-                Você está atualmente no plano Professional com 7 dias de teste
-                gratuito
+                Você está atualmente no período de teste gratuito do plano
+                Professional
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="rounded-lg border p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="font-medium">Professional</h3>
-                    <p className="text-sm text-muted-foreground">
-                      Para barbearias em crescimento
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xl font-bold">
-                      R$ 99,90
-                      <span className="text-sm font-normal text-muted-foreground">
-                        {" "}
-                        /mês
-                      </span>
-                    </p>
-                    <p className="text-sm text-green-600 font-medium">
-                      Período de teste: 5 dias restantes
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      Próxima cobrança em 15/04/2023
-                    </p>
-                  </div>
-                </div>
-                <Separator className="my-4" />
-                <div className="grid gap-2">
-                  {plans[1].features.map((feature, index) => (
-                    <div key={index} className="flex items-center">
-                      <Check className="mr-2 h-4 w-4 text-primary" />
-                      <span className="text-sm">{feature}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Alterar Plano</CardTitle>
-              <CardDescription>
-                Escolha o plano que melhor atende às necessidades da sua GENDAIA
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <RadioGroup
-                value={selectedPlan}
-                onValueChange={setSelectedPlan}
-                className="grid gap-4 md:grid-cols-3"
-              >
-                {plans.map((plan) => (
-                  <Label
-                    key={plan.id}
-                    htmlFor={plan.id}
-                    className={`flex cursor-pointer flex-col rounded-lg border p-4 ${
-                      selectedPlan === plan.id
-                        ? "border-primary bg-primary/5"
-                        : "border-border hover:bg-muted/50"
-                    } ${plan.recommended ? "relative" : ""}`}
-                  >
-                    {plan.recommended && (
-                      <div className="absolute -top-2 right-4 rounded-full bg-primary px-2 py-0.5 text-xs font-medium text-primary-foreground">
-                        Recomendado
-                      </div>
-                    )}
-                    <div className="flex items-start space-x-2">
-                      <RadioGroupItem
-                        value={plan.id}
-                        id={plan.id}
-                        className="mt-1"
-                      />
-                      <div className="space-y-2">
-                        <div className="space-y-1">
-                          <h3 className="font-medium">{plan.name}</h3>
-                          <p className="text-sm text-muted-foreground">
-                            {plan.description}
-                          </p>
-                        </div>
-                        <div className="text-xl font-bold">
-                          {plan.price}
-                          <span className="text-sm font-normal text-muted-foreground">
-                            {" "}
-                            /mês
-                          </span>
-                        </div>
-                        <ul className="space-y-2 text-sm">
-                          {plan.features.map((feature, index) => (
-                            <li key={index} className="flex items-center">
-                              <Check className="mr-2 h-4 w-4 text-primary" />
-                              {feature}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    </div>
-                  </Label>
-                ))}
-              </RadioGroup>
+              <p className="text-sm">
+                Seu período de teste termina em{" "}
+                <span className="font-medium">
+                  {formatDate(subscription.trial_end_date)}
+                </span>
+                . Após esse período, você será cobrado automaticamente pelo
+                plano selecionado.
+              </p>
             </CardContent>
             <CardFooter>
-              <Button>Atualizar Plano</Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  try {
+                    await fetch("/api/subscriptions/cancel", {
+                      method: "POST",
+                    });
+                    window.location.reload();
+                  } catch (error) {
+                    console.error("Error canceling trial:", error);
+                  }
+                }}
+              >
+                Cancelar Teste
+              </Button>
             </CardFooter>
           </Card>
-        </TabsContent>
-        <TabsContent value="billing" className="space-y-4 pt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Método de Pagamento</CardTitle>
-              <CardDescription>
-                Gerencie seu método de pagamento
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="rounded-lg border p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <CreditCard className="h-8 w-8 text-muted-foreground" />
-                    <div>
-                      <p className="font-medium">Cartão de Crédito</p>
-                      <p className="text-sm text-muted-foreground">
-                        Visa terminando em 4242
-                      </p>
-                    </div>
-                  </div>
-                  <Button variant="outline" size="sm">
-                    Alterar
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Histórico de Faturamento</CardTitle>
-              <CardDescription>
-                Visualize seu histórico de pagamentos
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="rounded-lg border p-4 text-center">
-                <p className="text-sm text-muted-foreground">
-                  Você está no período de teste gratuito. Seu primeiro pagamento
-                  será em {formattedTrialEndDate}.
-                </p>
+          {/* Stripe Pricing Table for trial users */}
+          <div className="mt-8">
+            <div className="mb-8">
+              <h2 className="text-2xl font-bold mb-2">Assine já</h2>
+            </div>
+            {subscription && (
+              <div className="w-full max-w-6xl mx-auto">
+                <StripePricingTable
+                  businessId={subscription.business_id}
+                  email={subscription.email}
+                />
               </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+            )}
+          </div>
+        </>
+      ) : (
+        <div>
+          {/* Stripe Pricing Table for trial users */}
+          <div className="mt-8">
+            <div className="mb-8">
+              Seu plano está expirado, assine agora e continue utilizando a
+              Gendaia
+            </div>
+            {subscription && (
+              <div className="w-full max-w-6xl mx-auto">
+                <StripePricingTable
+                  businessId={subscription.business_id}
+                  email={subscription.email}
+                />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

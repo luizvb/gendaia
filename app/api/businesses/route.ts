@@ -32,22 +32,11 @@ export async function POST(request: NextRequest) {
 
     const businessData = await request.json();
 
-    // Create Stripe customer
-    const customer = await stripe.customers.create({
-      email: user.email,
-      metadata: {
-        user_id: user.id,
-      },
-    });
-
-    // Start a transaction
+    // Start a transaction first, without stripe_customer_id
     const { data: business, error: businessError } = await supabase.rpc(
       "create_business_with_profile",
       {
-        business_data: {
-          ...businessData,
-          stripe_customer_id: customer.id,
-        },
+        business_data: businessData,
         p_user_id: user.id,
       }
     );
@@ -55,6 +44,26 @@ export async function POST(request: NextRequest) {
     if (businessError) {
       console.error("Business creation error:", businessError);
       throw businessError;
+    }
+
+    // Create Stripe customer after business creation
+    const customer = await stripe.customers.create({
+      email: user.email,
+      metadata: {
+        user_id: user.id,
+        business_id: business.id, // Add business_id to metadata
+      },
+    });
+
+    // Update business with stripe_customer_id
+    const { error: updateError } = await supabase
+      .from("businesses")
+      .update({ stripe_customer_id: customer.id })
+      .eq("id", business.id);
+
+    if (updateError) {
+      console.error("Error updating stripe_customer_id:", updateError);
+      throw updateError;
     }
 
     // Create initial subscription record with trial period
