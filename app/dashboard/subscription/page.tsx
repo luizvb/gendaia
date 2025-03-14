@@ -109,31 +109,7 @@ const StripePricingTable = ({
       'script[src="https://js.stripe.com/v3/pricing-table.js"]'
     );
 
-    if (!existingScript) {
-      // Add script to head only if it doesn't exist
-      const script = document.createElement("script");
-      script.src = "https://js.stripe.com/v3/pricing-table.js";
-      script.async = true;
-      script.onload = () => {
-        if (containerRef.current) {
-          const table = document.createElement("stripe-pricing-table");
-          table.setAttribute(
-            "pricing-table-id",
-            "prctbl_1R2Mu7KD7xVMZWERMkMCALzA"
-          );
-          table.setAttribute(
-            "publishable-key",
-            "pk_test_51QunOZKD7xVMZWERWzwJ173Y6r5oFhexgoflL4m6npRQoS9ogiw5ivuA9Pl6BmeEpMneHojRcPvX7M8zWPBkMiwD00Kflba83I"
-          );
-          table.setAttribute("client-reference-id", businessId);
-          table.setAttribute("customer-email", email);
-          table.setAttribute("appearance", "dark");
-          containerRef.current.appendChild(table);
-        }
-      };
-      document.head.appendChild(script);
-    } else {
-      // If script already exists, create table immediately
+    const createTable = () => {
       if (containerRef.current) {
         const table = document.createElement("stripe-pricing-table");
         table.setAttribute(
@@ -149,6 +125,18 @@ const StripePricingTable = ({
         table.setAttribute("appearance", "dark");
         containerRef.current.appendChild(table);
       }
+    };
+
+    if (!existingScript) {
+      // Add script to head only if it doesn't exist
+      const script = document.createElement("script");
+      script.src = "https://js.stripe.com/v3/pricing-table.js";
+      script.async = true;
+      script.onload = createTable;
+      document.head.appendChild(script);
+    } else {
+      // If script already exists, create table immediately
+      createTable();
     }
 
     return () => {
@@ -232,8 +220,7 @@ export default function SubscriptionPage() {
                 <span className="font-medium">
                   {formatDate(subscription.trial_end_date)}
                 </span>
-                . Após esse período, você será cobrado automaticamente pelo
-                plano selecionado.
+                . Assine um plano para continuar utilizando a Gendaia
               </p>
             </CardContent>
             <CardFooter>
