@@ -3,83 +3,6 @@ import { createClient } from "@/lib/supabase/server";
 import { getBusinessId } from "@/lib/business-id";
 import { format } from "date-fns";
 
-// Handler original para GET
-async function getAppointmentsHandler(request: NextRequest) {
-  try {
-    const supabase = await createClient();
-
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const { searchParams } = new URL(request.url);
-    const phone = searchParams.get("phone");
-
-    // Get the business_id using our utility function
-    const businessId = await getBusinessId(request);
-    if (!businessId) {
-      return NextResponse.json(
-        { error: "Business not found" },
-        { status: 404 }
-      );
-    }
-
-    // Base query
-    let query = supabase
-      .from("appointments")
-      .select(
-        `
-      *,
-      clients:client_id (id, name, phone),
-      professionals:professional_id (id, name),
-      services:service_id (id, name, duration, price)
-    `
-      )
-      .eq("business_id", businessId);
-
-    // Apply filters if provided
-    if (phone) {
-      // Join with clients table to filter by phone
-      query = supabase
-        .from("appointments")
-        .select(
-          `
-        *,
-        professionals:professional_id (id, name),
-        services:service_id (id, name, duration, price),
-        clients:client_id (id, name, phone)
-      `
-        )
-        .eq("business_id", businessId)
-        .eq("clients.phone", phone);
-    }
-
-    // Execute query
-    const { data, error } = await query.order("start_time", {
-      ascending: false,
-    });
-
-    if (error) {
-      console.error("Error fetching appointments:", error);
-      return NextResponse.json(
-        { error: "Failed to fetch appointments" },
-        { status: 500 }
-      );
-    }
-
-    return NextResponse.json(data);
-  } catch (error) {
-    console.error("Error in appointments API:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
-  }
-}
-
 // Handler GET sem cache
 export const GET = async (request: NextRequest) => {
   try {
@@ -161,24 +84,30 @@ export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
 
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    // Get the business_id using our utility function
-    const businessId = await getBusinessId(request);
-    if (!businessId) {
-      return NextResponse.json(
-        { error: "Business not found" },
-        { status: 404 }
-      );
-    }
-
-    // Parse request body
+    // Parse request body first
     const body = await request.json();
+
+    // If business_id is provided in body, use it directly
+    let businessId = body.business_id;
+
+    // Only check authentication if business_id is not provided in body
+    if (!businessId) {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+
+      // Get the business_id using our utility function
+      businessId = await getBusinessId(request);
+      if (!businessId) {
+        return NextResponse.json(
+          { error: "Business not found" },
+          { status: 404 }
+        );
+      }
+    }
 
     // Validate required fields
     const requiredFields = ["start_time", "professional_id", "service_id"];
