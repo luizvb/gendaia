@@ -21,12 +21,16 @@ import {
   QrCode,
   CheckCircle2,
   Smartphone,
+  Bell,
+  Settings,
 } from "lucide-react";
 import Image from "next/image";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import QRCode from "react-qr-code";
 import { formatPhoneNumber, normalizePhoneNumber } from "@/lib/utils";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 
 interface Message {
   id: string;
@@ -35,6 +39,12 @@ interface Message {
   message: string;
   direction: "incoming" | "outgoing";
   created_at: string;
+}
+
+interface NotificationPreferences {
+  appointment_confirmation: boolean;
+  appointment_reminder: boolean;
+  follow_up_message: boolean;
 }
 
 export default function WhatsAppPage() {
@@ -46,6 +56,14 @@ export default function WhatsAppPage() {
   const [phoneNumber, setPhoneNumber] = useState("");
   const [messageText, setMessageText] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const [isLoadingPreferences, setIsLoadingPreferences] = useState(false);
+  const [isSavingPreferences, setIsSavingPreferences] = useState(false);
+  const [notificationPreferences, setNotificationPreferences] =
+    useState<NotificationPreferences>({
+      appointment_confirmation: true,
+      appointment_reminder: false,
+      follow_up_message: false,
+    });
   const { toast } = useToast();
   const whatsappService = new WhatsAppService();
 
@@ -68,6 +86,7 @@ export default function WhatsAppPage() {
           setBusinessId(profile.business_id);
           checkSessionStatus(profile.business_id);
           loadMessages(profile.business_id);
+          loadNotificationPreferences(profile.business_id);
         }
       }
     };
@@ -112,6 +131,63 @@ export default function WhatsAppPage() {
     whatsappService.subscribeToMessages(id, (newMessage) => {
       setMessages((prev) => [newMessage, ...prev]);
     });
+  };
+
+  const loadNotificationPreferences = async (id: string) => {
+    setIsLoadingPreferences(true);
+    try {
+      const response = await fetch(`/api/notifications/preferences`);
+      if (!response.ok) {
+        throw new Error("Failed to load notification preferences");
+      }
+      const data = await response.json();
+      setNotificationPreferences(data);
+    } catch (error) {
+      console.error("Error loading notification preferences:", error);
+      toast({
+        title: "Erro ao carregar preferências",
+        description:
+          error instanceof Error ? error.message : "Erro desconhecido",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingPreferences(false);
+    }
+  };
+
+  const saveNotificationPreferences = async () => {
+    if (!businessId) return;
+
+    setIsSavingPreferences(true);
+    try {
+      const response = await fetch(`/api/notifications/preferences`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(notificationPreferences),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to save notification preferences");
+      }
+
+      toast({
+        title: "Preferências salvas",
+        description:
+          "Suas preferências de notificação foram salvas com sucesso",
+      });
+    } catch (error) {
+      console.error("Error saving notification preferences:", error);
+      toast({
+        title: "Erro ao salvar preferências",
+        description:
+          error instanceof Error ? error.message : "Erro desconhecido",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingPreferences(false);
+    }
   };
 
   const handleInitSession = async () => {
@@ -215,7 +291,7 @@ export default function WhatsAppPage() {
         className="bg-card rounded-lg shadow-sm border"
       >
         <div className="px-4 pt-4">
-          <TabsList className="mb-4 grid w-full grid-cols-2 p-1">
+          <TabsList className="mb-4 grid w-full grid-cols-3 p-1">
             <TabsTrigger value="config" className="rounded-md">
               <QrCode className="h-4 w-4 mr-2" />
               Configuração
@@ -223,6 +299,10 @@ export default function WhatsAppPage() {
             <TabsTrigger value="messages" className="rounded-md">
               <Send className="h-4 w-4 mr-2" />
               Mensagens
+            </TabsTrigger>
+            <TabsTrigger value="notifications" className="rounded-md">
+              <Bell className="h-4 w-4 mr-2" />
+              Notificações
             </TabsTrigger>
           </TabsList>
         </div>
@@ -447,6 +527,137 @@ export default function WhatsAppPage() {
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        <TabsContent value="notifications">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <Bell className="h-5 w-5 text-blue-500 dark:text-blue-400 mr-2" />
+                Preferências de Notificação
+              </CardTitle>
+              <CardDescription>
+                Configure como e quando enviar notificações automáticas para
+                seus clientes
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {isLoadingPreferences ? (
+                <div className="py-10 flex justify-center">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  <div className="border rounded-lg p-4 bg-muted/10">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-1">
+                        <div className="font-medium">
+                          Confirmação de Agendamento
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          Envia uma mensagem para o cliente assim que um
+                          agendamento é realizado
+                        </p>
+                      </div>
+                      <Switch
+                        checked={
+                          notificationPreferences.appointment_confirmation
+                        }
+                        onCheckedChange={(checked) =>
+                          setNotificationPreferences((prev) => ({
+                            ...prev,
+                            appointment_confirmation: checked,
+                          }))
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  <div className="border rounded-lg p-4 bg-muted/10">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-1">
+                        <div className="font-medium">
+                          Lembrete de Agendamento
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          Envia um lembrete 1 hora antes do horário agendado
+                        </p>
+                      </div>
+                      <Switch
+                        checked={notificationPreferences.appointment_reminder}
+                        onCheckedChange={(checked) =>
+                          setNotificationPreferences((prev) => ({
+                            ...prev,
+                            appointment_reminder: checked,
+                          }))
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  <div className="border rounded-lg p-4 bg-muted/10">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-1">
+                        <div className="font-medium">
+                          Mensagem de Acompanhamento
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          Envia uma mensagem 15 dias após o atendimento,
+                          perguntando se o cliente deseja agendar novamente
+                        </p>
+                      </div>
+                      <Switch
+                        checked={notificationPreferences.follow_up_message}
+                        onCheckedChange={(checked) =>
+                          setNotificationPreferences((prev) => ({
+                            ...prev,
+                            follow_up_message: checked,
+                          }))
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  <div className="bg-yellow-500/10 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
+                    <div className="flex gap-3">
+                      <Settings className="h-5 w-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <h4 className="font-medium text-yellow-600 dark:text-yellow-400">
+                          Notificações Automáticas
+                        </h4>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          As notificações automáticas dependem que seu WhatsApp
+                          esteja conectado. O sistema verificará automaticamente
+                          os agendamentos e enviará notificações de acordo com
+                          suas preferências.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+            <CardFooter className="border-t bg-muted/50 pt-4">
+              <Button
+                onClick={saveNotificationPreferences}
+                disabled={isSavingPreferences || !isActive}
+                className="w-full"
+              >
+                {isSavingPreferences ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Bell className="mr-2 h-4 w-4" />
+                )}
+                Salvar Preferências
+              </Button>
+              {!isActive && (
+                <p className="text-xs text-muted-foreground mt-2">
+                  Para usar notificações automáticas, conecte seu WhatsApp
+                  primeiro.
+                </p>
+              )}
+            </CardFooter>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>

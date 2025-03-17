@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getBusinessId } from "@/lib/business-id";
 import { format } from "date-fns";
+import { NotificationService } from "@/lib/services/notification-service";
 
 // Handler GET sem cache
 export const GET = async (request: NextRequest) => {
@@ -219,6 +220,30 @@ export async function POST(request: NextRequest) {
     if (error) {
       console.error("Error creating appointment:", error);
       return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    // Send WhatsApp notification if enabled
+    try {
+      const notificationService = new NotificationService();
+
+      // Get notification preferences
+      const preferences = await notificationService.getNotificationPreferences(
+        businessId
+      );
+
+      // Send confirmation if enabled
+      if (preferences && preferences.appointment_confirmation) {
+        await notificationService.sendAppointmentConfirmation(
+          businessId,
+          data[0]
+        );
+      }
+    } catch (notificationError) {
+      // Log but don't fail the appointment creation if notification fails
+      console.error(
+        "Error sending appointment notification:",
+        notificationError
+      );
     }
 
     return NextResponse.json(data[0], { status: 201 });
