@@ -33,6 +33,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { toast } from "sonner";
+import { formatPhoneNumber, normalizePhoneNumber } from "@/lib/utils";
 
 interface Client {
   id: number;
@@ -74,24 +75,39 @@ export default function ClientsPage() {
   const filteredClients = clients.filter(
     (client) =>
       client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      client.phone.includes(searchTerm)
+      client.phone.includes(normalizePhoneNumber(searchTerm))
   );
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
+
+    if (name === "phone") {
+      setFormData((prev) => ({
+        ...prev,
+        [name]: formatPhoneNumber(value),
+      }));
+    } else {
+      setFormData((prev) => ({
+        ...prev,
+        [name]: value,
+      }));
+    }
   };
 
   const handleSubmit = async () => {
     try {
       setIsLoading(true);
+
+      // Normalize phone before sending to API
+      const normalizedPhone = normalizePhoneNumber(formData.phone);
+
       const response = await fetch("/api/clients", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          name: formData.name,
+          phone: normalizedPhone,
+        }),
       });
 
       if (!response.ok) throw new Error("Failed to create client");
@@ -168,7 +184,7 @@ export default function ClientsPage() {
               {filteredClients.map((client) => (
                 <TableRow key={client.id}>
                   <TableCell>{client.name}</TableCell>
-                  <TableCell>{client.phone}</TableCell>
+                  <TableCell>{formatPhoneNumber(client.phone)}</TableCell>
                   <TableCell>
                     {client.lastVisit
                       ? new Date(client.lastVisit).toLocaleDateString("pt-BR")
@@ -239,7 +255,11 @@ export default function ClientsPage() {
                 name="phone"
                 value={formData.phone}
                 onChange={handleInputChange}
+                placeholder="+55 (11) 99999-9999"
               />
+              <p className="text-xs text-muted-foreground mt-1">
+                Digite o número com código do país e DDD
+              </p>
             </div>
           </div>
 

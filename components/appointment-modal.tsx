@@ -36,6 +36,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+import { formatPhoneNumber, normalizePhoneNumber } from "@/lib/utils";
 
 interface Client {
   id: number;
@@ -122,7 +123,7 @@ export function AppointmentModal({
   );
   const [serviceId, setServiceId] = useState<string>("");
   const [clientName, setClientName] = useState("");
-  const [clientPhone, setClientPhone] = useState("");
+  const [clientPhone, setClientPhone] = useState("+55 ");
   const [notes, setNotes] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
@@ -159,7 +160,9 @@ export function AppointmentModal({
       setProfessionalId(selectedAppointment.professional_id.toString());
       setServiceId(selectedAppointment.service_id.toString());
       setClientName(selectedAppointment.clients.name);
-      setClientPhone(selectedAppointment.clients.phone || "");
+      setClientPhone(
+        formatPhoneNumber(selectedAppointment.clients.phone || "")
+      );
       setSelectedClientId(selectedAppointment.client_id);
       setNotes(selectedAppointment.notes || "");
       setIsCreatingClient(false);
@@ -172,7 +175,7 @@ export function AppointmentModal({
       // Set first service as default if available
       setServiceId(services.length > 0 ? services[0].id : "");
       setClientName("");
-      setClientPhone("");
+      setClientPhone("+55 ");
       setSelectedClientId(null);
       setNotes("");
       setIsCreatingClient(false);
@@ -185,7 +188,7 @@ export function AppointmentModal({
       // Set first service as default if available
       setServiceId(services.length > 0 ? services[0].id : "");
       setClientName("");
-      setClientPhone("");
+      setClientPhone("+55 ");
       setSelectedClientId(null);
       setNotes("");
       setIsCreatingClient(false);
@@ -525,7 +528,7 @@ export function AppointmentModal({
 
   const handleClientSelect = (client: Client) => {
     setClientName(client.name);
-    setClientPhone(client.phone || "");
+    setClientPhone(formatPhoneNumber(client.phone || ""));
     setSelectedClientId(client.id);
     setIsClientPopoverOpen(false);
     // Cancela o modo de criação de cliente se estiver ativo
@@ -559,6 +562,9 @@ export function AppointmentModal({
         toast.error("Por favor, preencha todos os campos obrigatórios");
         return;
       }
+
+      // Normalize phone number
+      const normalizedPhone = normalizePhoneNumber(clientPhone);
 
       console.log("Todos os campos preenchidos, buscando serviço...");
       const selectedService = services.find((s) => s.id === serviceId);
@@ -682,7 +688,7 @@ export function AppointmentModal({
         clientId,
         isCreatingClient,
         clientName,
-        clientPhone,
+        clientPhone: normalizedPhone,
       });
 
       // Se não tiver um cliente selecionado ou estiver criando um novo, criar um novo
@@ -695,7 +701,7 @@ export function AppointmentModal({
           },
           body: JSON.stringify({
             name: clientName,
-            phone: clientPhone,
+            phone: normalizedPhone,
             email: newClientEmail || undefined,
             business_id: selectedProfessional.business_id,
           }),
@@ -720,7 +726,7 @@ export function AppointmentModal({
         onClientCreated?.({
           id: client.id, // Antes era client[0].id
           name: clientName,
-          phone: clientPhone,
+          phone: normalizedPhone,
           email: newClientEmail || undefined,
         });
 
@@ -881,7 +887,9 @@ export function AppointmentModal({
     return clients.filter(
       (client) =>
         client.name.toLowerCase().includes(clientSearchTerm.toLowerCase()) ||
-        client.phone.includes(clientSearchTerm)
+        normalizePhoneNumber(client.phone).includes(
+          normalizePhoneNumber(clientSearchTerm)
+        )
     );
   }, [clients, clientSearchTerm]);
 
@@ -1045,7 +1053,7 @@ export function AppointmentModal({
                             <div className="flex flex-col">
                               <span>{client.name}</span>
                               <span className="text-xs text-muted-foreground">
-                                {client.phone}
+                                {formatPhoneNumber(client.phone)}
                               </span>
                             </div>
                           </CommandItem>
@@ -1082,9 +1090,14 @@ export function AppointmentModal({
                 <Input
                   id="client-phone"
                   value={clientPhone}
-                  onChange={(e) => setClientPhone(e.target.value)}
-                  placeholder="(00) 00000-0000"
+                  onChange={(e) =>
+                    setClientPhone(formatPhoneNumber(e.target.value))
+                  }
+                  placeholder="+55 (11) 99999-9999"
                 />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Digite o número com código do país e DDD
+                </p>
               </div>
             </>
           ) : null}

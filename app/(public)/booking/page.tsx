@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { formatPhoneNumber, normalizePhoneNumber } from "@/lib/utils";
 
 // Constante para o nome da chave no localStorage
 const PHONE_STORAGE_KEY = "barbershop_user_phone";
@@ -81,9 +82,9 @@ export default function BookingPage() {
   useEffect(() => {
     const savedPhone = localStorage.getItem(PHONE_STORAGE_KEY);
     if (savedPhone) {
-      setPhone(savedPhone);
+      setPhone(formatPhoneNumber(savedPhone));
       if (activeTab === "view") {
-        fetchAppointments(savedPhone);
+        fetchAppointments(normalizePhoneNumber(savedPhone));
       }
     }
   }, [activeTab]);
@@ -309,11 +310,14 @@ export default function BookingPage() {
   const fetchAppointments = async (phoneNumber: string) => {
     if (!phoneNumber || !business?.id) return;
 
+    // Ensure the phone number is normalized
+    const normalizedPhone = normalizePhoneNumber(phoneNumber);
+
     setLoadingAppointments(true);
     try {
       const response = await fetch(
         `/api/appointments?phone=${encodeURIComponent(
-          phoneNumber
+          normalizedPhone
         )}&business_id=${business.id}`
       );
       const data = await response.json();
@@ -334,8 +338,11 @@ export default function BookingPage() {
     setError(null);
     setSuccess(null);
 
+    // Normalize phone before saving to storage
+    const normalizedPhone = normalizePhoneNumber(phone);
+
     // Salvar telefone no localStorage
-    localStorage.setItem(PHONE_STORAGE_KEY, phone);
+    localStorage.setItem(PHONE_STORAGE_KEY, normalizedPhone);
 
     try {
       // Verificar se todos os campos estão preenchidos
@@ -376,7 +383,7 @@ export default function BookingPage() {
         },
         body: JSON.stringify({
           client_name: name,
-          client_phone: phone,
+          client_phone: normalizedPhone,
           start_time: startTimeISO,
           end_time: endTimeISO,
           professional_id: professional,
@@ -402,7 +409,7 @@ export default function BookingPage() {
       // Mudar para a aba de visualização após alguns segundos
       setTimeout(() => {
         setActiveTab("view");
-        fetchAppointments(phone);
+        fetchAppointments(normalizedPhone);
       }, 2000);
     } catch (error: any) {
       console.error("Erro ao agendar:", error);
@@ -424,8 +431,9 @@ export default function BookingPage() {
       return;
     }
 
-    localStorage.setItem(PHONE_STORAGE_KEY, phone);
-    fetchAppointments(phone);
+    const normalizedPhone = normalizePhoneNumber(phone);
+    localStorage.setItem(PHONE_STORAGE_KEY, normalizedPhone);
+    fetchAppointments(normalizedPhone);
   };
 
   const handleCancelAppointment = async (appointmentId: string) => {
@@ -534,8 +542,10 @@ export default function BookingPage() {
                       <Input
                         id="phone"
                         value={phone}
-                        onChange={(e) => setPhone(e.target.value)}
-                        placeholder="(00) 00000-0000"
+                        onChange={(e) =>
+                          setPhone(formatPhoneNumber(e.target.value))
+                        }
+                        placeholder="+55 (11) 99999-9999"
                         className="border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
                       />
                     </div>
@@ -674,8 +684,10 @@ export default function BookingPage() {
                       <Phone className="mr-2 h-4 w-4 text-muted-foreground" />
                       <Input
                         value={phone}
-                        onChange={(e) => setPhone(e.target.value)}
-                        placeholder="(00) 00000-0000"
+                        onChange={(e) =>
+                          setPhone(formatPhoneNumber(e.target.value))
+                        }
+                        placeholder="+55 (11) 99999-9999"
                         className="border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
                       />
                     </div>

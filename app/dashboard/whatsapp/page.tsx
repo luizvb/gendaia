@@ -26,6 +26,7 @@ import Image from "next/image";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import QRCode from "react-qr-code";
+import { formatPhoneNumber, normalizePhoneNumber } from "@/lib/utils";
 
 interface Message {
   id: string;
@@ -63,12 +64,9 @@ export default function WhatsAppPage() {
           .eq("user_id", session.user.id)
           .single();
 
-        console.log("Profile data:", profile);
-
         if (profile?.business_id) {
-          console.log("Setting business_id:", profile.business_id);
           setBusinessId(profile.business_id);
-          checkStatus(profile.business_id);
+          checkSessionStatus(profile.business_id);
           loadMessages(profile.business_id);
         }
       }
@@ -77,19 +75,17 @@ export default function WhatsAppPage() {
     fetchBusinessData();
   }, []);
 
-  const checkStatus = async (id: string) => {
-    const { isActive, error } = await whatsappService.getSessionStatus(id);
+  const checkSessionStatus = async (id: string) => {
+    const supabase = createClient();
+    const { data } = await supabase
+      .from("whatsapp_sessions")
+      .select("*")
+      .eq("business_id", id)
+      .order("updated_at", { ascending: false })
+      .limit(1);
 
-    if (error) {
-      toast({
-        title: "Erro ao verificar status",
-        description: error,
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setIsActive(isActive);
+    // If there's data and status is connected, set isActive to true
+    setIsActive(!!(data && data.length > 0 && data[0].status === "CONNECTED"));
   };
 
   const loadMessages = async (id: string) => {
@@ -119,10 +115,7 @@ export default function WhatsAppPage() {
   };
 
   const handleInitSession = async () => {
-    console.log("handleInitSession", businessId);
-
     if (!businessId) {
-      console.log("No business ID available");
       toast({
         title: "Erro ao inicializar WhatsApp",
         description: "ID da empresa não encontrado",
@@ -132,15 +125,10 @@ export default function WhatsAppPage() {
     }
 
     setIsLoading(true);
-    console.log(
-      "Calling whatsappService.initSession with businessId:",
-      businessId
-    );
     const { qrCode, error } = await whatsappService.initSession({ businessId });
     setIsLoading(false);
 
     if (error) {
-      console.log("Error initializing WhatsApp:", error);
       toast({
         title: "Erro ao inicializar WhatsApp",
         description: error,
@@ -149,18 +137,10 @@ export default function WhatsAppPage() {
       return;
     }
 
-    // O QR code pode vir em diferentes formatos:
-    // 1. Uma string base64 completa (data:image/png;base64,...)
-    // 2. Uma string base64 sem o prefixo (o serviço adiciona o prefixo)
-    // 3. Um texto simples que será convertido em QR code pelo componente QRCode
-    console.log("QR Code received:", qrCode ? "Yes" : "No");
-    if (qrCode) {
-      console.log("QR Code format:", qrCode.substring(0, 30) + "...");
-    }
     setQrCode(qrCode);
 
     // Check status after a delay to see if connection was successful
-    setTimeout(() => checkStatus(businessId), 30000);
+    setTimeout(() => checkSessionStatus(businessId), 30000);
   };
 
   const handleDisconnect = async () => {
@@ -193,10 +173,13 @@ export default function WhatsAppPage() {
   const handleSendMessage = async () => {
     if (!businessId || !phoneNumber || !messageText) return;
 
+    // Normalize phone number before sending to API
+    const normalizedPhone = normalizePhoneNumber(phoneNumber);
+
     setIsSending(true);
     const { success, error } = await whatsappService.sendMessage({
       businessId,
-      phoneNumber,
+      phoneNumber: normalizedPhone,
       message: messageText,
     });
     setIsSending(false);
@@ -370,13 +353,14 @@ export default function WhatsAppPage() {
                       Número de Telefone
                     </label>
                     <Input
-                      placeholder="Ex: 5511999999999"
+                      placeholder="Ex: +55 (11) 99999-9999"
                       value={phoneNumber}
-                      onChange={(e) => setPhoneNumber(e.target.value)}
+                      onChange={(e) =>
+                        setPhoneNumber(formatPhoneNumber(e.target.value))
+                      }
                     />
                     <p className="text-xs text-muted-foreground mt-1">
-                      Digite o número com código do país e DDD, sem espaços ou
-                      caracteres especiais
+                      Digite o número com código do país e DDD
                     </p>
                   </div>
 
@@ -449,7 +433,7 @@ export default function WhatsAppPage() {
                             {msg.direction === "outgoing"
                               ? "Enviado para"
                               : "Recebido de"}
-                            : {msg.phone_number}
+                            : {formatPhoneNumber(msg.phone_number)}
                           </span>
                           <span className="text-xs text-muted-foreground">
                             {new Date(msg.created_at).toLocaleString()}
