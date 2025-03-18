@@ -72,11 +72,6 @@ export default function BookingPage() {
   const [loadingAppointments, setLoadingAppointments] = useState(false);
   const [business, setBusiness] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [professionalsAvailability, setProfessionalsAvailability] = useState<{
-    [professionalId: string]: {
-      [date: string]: string[];
-    };
-  }>({});
 
   // Carregar telefone do localStorage ao iniciar
   useEffect(() => {
@@ -189,36 +184,6 @@ export default function BookingPage() {
       if (professionalsData.length > 0) {
         setProfessional(professionalsData[0].id);
       }
-
-      // Fetch availability for the next 7 days for all professionals
-      const availabilityData: {
-        [professionalId: string]: {
-          [date: string]: string[];
-        };
-      } = {};
-
-      // Get next 7 days
-      const dates = Array.from({ length: 7 }, (_, i) => {
-        const date = new Date();
-        date.setDate(date.getDate() + i);
-        return format(date, "yyyy-MM-dd");
-      });
-
-      // Fetch availability for each professional and date
-      for (const prof of professionalsData) {
-        availabilityData[prof.id] = {};
-        for (const date of dates) {
-          const availabilityResponse = await fetch(
-            `/api/availability?professional_id=${prof.id}&date=${date}&service_duration=15`
-          );
-          if (availabilityResponse.ok) {
-            const { available_slots } = await availabilityResponse.json();
-            availabilityData[prof.id][date] = available_slots;
-          }
-        }
-      }
-
-      setProfessionalsAvailability(availabilityData);
     } catch (err) {
       console.error("Error fetching data:", err);
       setError(err instanceof Error ? err.message : "Unknown error");
@@ -241,57 +206,9 @@ export default function BookingPage() {
       const spTimeZone = "America/Sao_Paulo";
       const formattedDate = formatInTimeZone(date, spTimeZone, "yyyy-MM-dd");
 
-      // Check if we have pre-fetched availability data
-      if (
-        professionalsAvailability &&
-        Object.keys(professionalsAvailability).length > 0
-      ) {
-        // Get all available 15-minute slots
-        const allAvailableSlots =
-          professionalsAvailability[professional]?.[formattedDate] || [];
-
-        // Filter slots based on service duration
-        const serviceDurationInMinutes = selectedService.duration;
-        const requiredConsecutiveSlots = Math.ceil(
-          serviceDurationInMinutes / 15
-        );
-
-        // Only keep slots that have enough consecutive slots available after them
-        const validSlots = allAvailableSlots.filter((slot) => {
-          // If we only need one slot (15 min service), this slot is valid
-          if (requiredConsecutiveSlots === 1) return true;
-
-          // For longer services, check if we have enough consecutive slots
-          const [hours, minutes] = slot.split(":").map(Number);
-          const baseDate = new Date(date);
-          baseDate.setHours(hours, minutes, 0, 0);
-
-          // Check if we have enough consecutive slots
-          for (let i = 1; i < requiredConsecutiveSlots; i++) {
-            // Calculate the next slot time (current + i*15 minutes)
-            const nextSlotTime = new Date(baseDate);
-            nextSlotTime.setMinutes(nextSlotTime.getMinutes() + i * 15);
-
-            // Format to HH:mm for comparison
-            const nextSlotFormatted = format(nextSlotTime, "HH:mm");
-
-            // If the next required slot is not available, this starting slot is not valid
-            if (!allAvailableSlots.includes(nextSlotFormatted)) {
-              return false;
-            }
-          }
-
-          // If we got here, all required consecutive slots are available
-          return true;
-        });
-
-        setTimeSlots(validSlots);
-        return;
-      }
-
-      // Fall back to API call if pre-fetched data is not available
+      // Always fetch fresh data from the API with the correct service duration
       const response = await fetch(
-        `/api/availability?professional_id=${professional}&date=${formattedDate}&service_duration=${selectedService.duration}`
+        `/api/availability?professional_id=${professional}&date=${formattedDate}&service_duration=${selectedService.duration}&business_id=${business.id}`
       );
 
       if (!response.ok) {
