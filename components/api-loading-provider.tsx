@@ -100,7 +100,7 @@ export function ApiLoadingProvider({ children }: { children: ReactNode }) {
     >
       {children}
       {isLoading && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
           <div className="relative">
             <LoadingSpinner
               variant="primary"
