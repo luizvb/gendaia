@@ -127,6 +127,23 @@ Se algo não for válido, use as sugestões retornadas para ajudar o cliente a e
 Se forem encontrados múltiplos clientes com o mesmo nome, peça ao cliente para confirmar qual é o correto.
 `;
 
+// Maximum number of messages to keep in history to prevent large requests
+const MAX_MESSAGE_HISTORY = 10;
+
+// Function to manage message history size
+function trimMessageHistory(messages: any[]) {
+  if (messages.length <= MAX_MESSAGE_HISTORY) return messages;
+
+  // Keep system message (if any) and most recent messages
+  const systemMessages = messages.filter((m) => m.role === "system");
+  const nonSystemMessages = messages.filter((m) => m.role !== "system");
+
+  // Get the most recent messages, preserving the conversation flow
+  const recentMessages = nonSystemMessages.slice(-MAX_MESSAGE_HISTORY);
+
+  return [...systemMessages, ...recentMessages];
+}
+
 export async function POST(req: Request) {
   try {
     let { messages, phone_number, client_name, client_phone } =
@@ -168,10 +185,13 @@ export async function POST(req: Request) {
 
     console.log("messages", messages);
 
+    // Trim message history to prevent large requests
+    const trimmedMessages = trimMessageHistory(messages);
+
     console.log(
       "Messages",
       JSON.stringify(
-        messages.map((m: any) => ({
+        trimmedMessages.map((m: any) => ({
           role: m.role,
           content: Array.isArray(m.content) ? m.content : [{ text: m.content }],
         }))
@@ -180,7 +200,7 @@ export async function POST(req: Request) {
 
     const command = new ConverseCommand({
       modelId: "anthropic.claude-3-sonnet-20240229-v1:0",
-      messages: messages.map((m: any) => ({
+      messages: trimmedMessages.map((m: any) => ({
         role: m.role,
         content: Array.isArray(m.content) ? m.content : [{ text: m.content }],
       })),
@@ -383,17 +403,22 @@ export async function POST(req: Request) {
           })),
         };
 
-        // Recursively call the API with tool results
+        // Recursively call the API with tool results, but manage history size
+        // Keep only the most recent messages to prevent the request from growing too large
+        const newMessages = trimMessageHistory([
+          ...trimmedMessages,
+          response.output?.message,
+          toolResultMessage,
+        ]);
+
         const newReq = new Request(req.url, {
           method: "POST",
           headers: req.headers,
           body: JSON.stringify({
-            messages: [
-              ...messages,
-              response.output?.message,
-              toolResultMessage,
-            ],
-            phone_number, // Keep passing the phone number
+            messages: newMessages,
+            phone_number,
+            client_name,
+            client_phone,
           }),
         });
 
