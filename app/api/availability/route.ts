@@ -8,6 +8,7 @@ import {
   setHours,
   setMinutes,
 } from "date-fns";
+import { getBusinessId } from "@/lib/business-id";
 
 // Mark this route as dynamic to avoid static generation errors
 export const dynamic = "force-dynamic";
@@ -37,13 +38,23 @@ export async function GET(request: NextRequest) {
     const { searchParams } = request.nextUrl;
     const professionalId = searchParams.get("professional_id");
     const date = searchParams.get("date");
+    const startDate = searchParams.get("start_date");
+    const endDate = searchParams.get("end_date");
     const serviceDuration = parseInt(
       searchParams.get("service_duration") || "30"
     );
-    const businessId = searchParams.get("business_id");
+
     const fetchAll = searchParams.get("fetch_all") === "true";
     const daysAhead = parseInt(searchParams.get("days_ahead") || "15");
 
+    const businessId =
+      (await getBusinessId(request)) || searchParams.get("business_id");
+    if (!businessId) {
+      return NextResponse.json(
+        { error: "Business not found" },
+        { status: 404 }
+      );
+    }
     // Criar cliente Supabase e aguardar sua inicialização
     const supabase = await createClient();
 
@@ -52,7 +63,8 @@ export async function GET(request: NextRequest) {
       // Buscar todos os profissionais
       const { data: professionals, error: professionalsError } = await supabase
         .from("professionals")
-        .select("id, name, color, business_id");
+        .select("id, name, color, business_id")
+        .eq("business_id", businessId);
 
       if (professionalsError) {
         console.error("Erro ao buscar profissionais:", professionalsError);
@@ -62,23 +74,37 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      // Data atual
-      const today = new Date();
+      // Data inicial e final para o cálculo
+      let startDateTime, endDateTime;
 
-      // Datas para os próximos X dias
-      const dates = Array.from({ length: daysAhead }, (_, i) =>
-        format(addDays(today, i), "yyyy-MM-dd")
-      );
+      // Use provided date range if available, otherwise use days ahead
+      if (startDate && endDate) {
+        startDateTime = parse(startDate, "yyyy-MM-dd", new Date());
+        endDateTime = parse(endDate, "yyyy-MM-dd", new Date());
+      } else {
+        // Use days ahead from today
+        const today = new Date();
+        startDateTime = today;
+        endDateTime = addDays(today, daysAhead - 1);
+      }
 
-      // Buscar todos os agendamentos para os próximos X dias
-      const startDate = format(today, "yyyy-MM-dd");
-      const endDate = format(addDays(today, daysAhead - 1), "yyyy-MM-dd");
+      // Datas para o intervalo especificado
+      const dates: string[] = [];
+      let currentDate = startDateTime;
+      while (currentDate <= endDateTime) {
+        dates.push(format(currentDate, "yyyy-MM-dd"));
+        currentDate = addDays(currentDate, 1);
+      }
+
+      // Buscar todos os agendamentos para o intervalo
+      const formattedStartDate = format(startDateTime, "yyyy-MM-dd");
+      const formattedEndDate = format(addDays(endDateTime, 1), "yyyy-MM-dd");
 
       let appointmentsQuery = supabase
         .from("appointments")
         .select("start_time, end_time, professional_id")
-        .gte("start_time", `${startDate}T00:00:00`)
-        .lt("start_time", `${endDate}T23:59:59`);
+        .gte("start_time", `${formattedStartDate}T00:00:00`)
+        .lt("start_time", `${formattedEndDate}T00:00:00`);
 
       // Add business_id filter if provided
       if (businessId) {
@@ -216,7 +242,11 @@ function calculateAvailableSlots(
         (start < appointmentEnd && end > appointmentStart) ||
         // Também verificar casos específicos de início/fim exatamente iguais
         start.getTime() === appointmentStart.getTime() ||
-        end.getTime() === appointmentEnd.getTime()
+        end.getTime() === appointmentEnd.getTime() ||
+        // Verificar se o slot está completamente dentro de um agendamento
+        (start >= appointmentStart && end <= appointmentEnd) ||
+        // Verificar se o agendamento está completamente dentro do slot
+        (appointmentStart >= start && appointmentEnd <= end)
       );
     });
   };

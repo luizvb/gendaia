@@ -139,7 +139,14 @@ export function AppointmentModal({
   // Update client search when term changes
   useEffect(() => {
     if (clientSearchTerm.length >= 2) {
-      onClientSearch(clientSearchTerm);
+      // If the search term looks like a phone number (contains digits)
+      if (/\d/.test(clientSearchTerm)) {
+        // Search by phone
+        onClientSearch(clientSearchTerm);
+      } else {
+        // Search by name
+        onClientSearch(clientSearchTerm);
+      }
     }
   }, [clientSearchTerm, onClientSearch]);
 

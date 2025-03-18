@@ -110,7 +110,6 @@ export function CalendarView() {
       setProfessionals(data);
     } catch (error) {
       console.error("Erro ao carregar profissionais:", error);
-      toast.error("Não foi possível carregar os profissionais");
     }
   }, []);
 
@@ -122,15 +121,21 @@ export function CalendarView() {
       setServices(data);
     } catch (error) {
       console.error("Erro ao carregar serviços:", error);
-      toast.error("Não foi possível carregar os serviços");
     }
   }, []);
 
   const fetchClients = useCallback(async (searchTerm = "") => {
     try {
-      const url = searchTerm
-        ? `/api/clients?name=${encodeURIComponent(searchTerm)}`
-        : "/api/clients";
+      let url = "/api/clients";
+
+      if (searchTerm) {
+        // If the search term looks like a phone number (contains digits)
+        if (/\d/.test(searchTerm)) {
+          url = `/api/clients?phone=${encodeURIComponent(searchTerm)}`;
+        } else {
+          url = `/api/clients?name=${encodeURIComponent(searchTerm)}`;
+        }
+      }
 
       const response = await fetch(url);
       if (!response.ok) throw new Error("Falha ao carregar clientes");
@@ -138,7 +143,6 @@ export function CalendarView() {
       setClients(data);
     } catch (error) {
       console.error("Erro ao carregar clientes:", error);
-      toast.error("Não foi possível carregar os clientes");
     }
   }, []);
 
@@ -175,7 +179,6 @@ export function CalendarView() {
       setAppointments(data);
     } catch (error) {
       console.error("Erro ao carregar agendamentos:", error);
-      toast.error("Não foi possível carregar os agendamentos");
     }
   }, [currentDate, view]);
 
@@ -200,7 +203,6 @@ export function CalendarView() {
       setProfessionalsAvailability(availabilityMap);
     } catch (error) {
       console.error("Erro ao carregar disponibilidades:", error);
-      toast.error("Não foi possível carregar as disponibilidades");
     }
   }, []);
 
@@ -245,7 +247,6 @@ export function CalendarView() {
       }
     } catch (error) {
       console.error("Erro ao carregar horários de funcionamento:", error);
-      toast.error("Não foi possível carregar os horários de funcionamento");
     }
   }, []);
 
@@ -261,7 +262,6 @@ export function CalendarView() {
       console.log("Agendamentos e disponibilidades atualizados com sucesso");
     } catch (error) {
       console.error("Erro ao atualizar dados:", error);
-      toast.error("Não foi possível atualizar os dados");
     } finally {
       setIsLoading(false);
     }
@@ -299,7 +299,6 @@ export function CalendarView() {
           setAppointments(data);
         } catch (error) {
           console.error("Erro ao carregar agendamentos:", error);
-          toast.error("Não foi possível carregar os agendamentos");
         }
       })();
     },
@@ -377,6 +376,22 @@ export function CalendarView() {
       );
     },
     [isDayOpen, getBusinessHoursForDay]
+  );
+
+  // Add this function after the isTimeSlotWithinBusinessHours function
+  const isSlotAvailable = useCallback(
+    (currentHour: Date, timeSlotAppointments: Appointment[]) => {
+      // Check if the slot is in the past
+      const now = new Date();
+      if (currentHour < now) return false;
+
+      // Check if there are any appointments in this slot
+      if (timeSlotAppointments.length > 0) return false;
+
+      // Check if it's within business hours
+      return isTimeSlotWithinBusinessHours(currentHour);
+    },
+    [isTimeSlotWithinBusinessHours]
   );
 
   // Gerar os horários do dia com base nos horários de funcionamento
@@ -803,16 +818,31 @@ export function CalendarView() {
               return (
                 <div
                   key={i}
-                  className={`flex-1 flex h-12 flex-col items-center justify-center
-                    ${isSameDay(day, new Date()) ? "bg-accent" : ""}
-                    ${!isOpen ? "bg-gray-100 text-gray-400" : ""}`}
+                  className={cn(
+                    "flex-1 flex h-12 flex-col items-center justify-center",
+                    isSameDay(day, new Date()) && "bg-accent",
+                    !isOpen && "bg-gray-100"
+                  )}
                 >
-                  <span className="text-xs font-medium text-muted-foreground">
+                  <span
+                    className={cn(
+                      "text-xs font-medium",
+                      !isOpen ? "text-gray-500" : "text-muted-foreground"
+                    )}
+                  >
                     {format(day, "EEE", { locale: ptBR })}
                   </span>
-                  <span className="text-sm font-semibold">
+                  <span
+                    className={cn(
+                      "text-sm font-semibold",
+                      !isOpen && "text-gray-500"
+                    )}
+                  >
                     {format(day, "dd")}
                   </span>
+                  {!isOpen && (
+                    <span className="text-[10px] text-gray-500">Fechado</span>
+                  )}
                 </div>
               );
             })}
@@ -902,14 +932,22 @@ export function CalendarView() {
                                   );
                                 });
 
+                              // Update the calendar grid section (find the dayHours.map part)
+                              const isAvailable = isSlotAvailable(
+                                currentHour,
+                                timeSlotAppointments
+                              );
+
                               return (
                                 <div
                                   key={hourIndex}
                                   className={`group relative h-12 border-b border-dashed border-border ${
-                                    !isWithinBusinessHours ? "bg-gray-100" : ""
+                                    !isWithinBusinessHours || !isAvailable
+                                      ? "bg-gray-100 cursor-not-allowed"
+                                      : "cursor-pointer"
                                   }`}
                                   onClick={() => {
-                                    if (isWithinBusinessHours) {
+                                    if (isWithinBusinessHours && isAvailable) {
                                       openAppointmentModal(
                                         currentHour,
                                         selectedProfessional ||
@@ -1001,12 +1039,16 @@ export function CalendarView() {
                                     })}
                                     {timeSlotAppointments.length === 0 && (
                                       <div className="absolute inset-0 flex cursor-pointer items-center justify-center opacity-0 transition-opacity group-hover:opacity-100">
-                                        {isWithinBusinessHours && (
-                                          <Plus className="h-4 w-4" />
-                                        )}
-                                        {!isWithinBusinessHours && (
+                                        {isWithinBusinessHours &&
+                                          isAvailable && (
+                                            <Plus className="h-4 w-4" />
+                                          )}
+                                        {(!isWithinBusinessHours ||
+                                          !isAvailable) && (
                                           <span className="text-xs text-gray-400">
-                                            Fechado
+                                            {!isWithinBusinessHours
+                                              ? "Fechado"
+                                              : "Indisponível"}
                                           </span>
                                         )}
                                       </div>
@@ -1016,7 +1058,7 @@ export function CalendarView() {
                               );
                             })
                         ) : (
-                          <div className="h-24 flex items-center justify-center text-gray-500 text-sm">
+                          <div className="h-full flex items-center justify-center text-gray-500 text-sm border-b">
                             Fechado
                           </div>
                         )}

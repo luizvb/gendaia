@@ -121,6 +121,36 @@ export async function DELETE(
 
     const id = params.id;
 
+    // First, get the appointment to check its date
+    const { data: appointment, error: fetchError } = await supabase
+      .from("appointments")
+      .select("start_time")
+      .eq("id", id)
+      .eq("business_id", session.user.id)
+      .single();
+
+    if (fetchError) {
+      return NextResponse.json({ error: fetchError.message }, { status: 500 });
+    }
+
+    if (!appointment) {
+      return NextResponse.json(
+        { error: "Agendamento não encontrado" },
+        { status: 404 }
+      );
+    }
+
+    // Check if the appointment is in the past
+    const appointmentStart = new Date(appointment.start_time);
+    const now = new Date();
+
+    if (appointmentStart < now) {
+      return NextResponse.json(
+        { error: "Não é possível cancelar agendamentos passados" },
+        { status: 400 }
+      );
+    }
+
     const { error } = await supabase
       .from("appointments")
       .delete()

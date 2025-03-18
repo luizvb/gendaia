@@ -95,6 +95,7 @@ export async function POST(request: NextRequest) {
           name: body.name,
           color: body.color || null,
           business_id: businessId,
+          specialty: body.specialty || null,
         },
       ])
       .select();
@@ -150,6 +151,7 @@ export async function PUT(request: NextRequest) {
     // Only include fields that are provided
     if (body.name) updateData.name = body.name;
     if (body.color !== undefined) updateData.color = body.color;
+    if (body.specialty !== undefined) updateData.specialty = body.specialty;
 
     // Update professional
     const { error } = await supabase

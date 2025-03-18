@@ -16,6 +16,7 @@ export const GET = async (request: NextRequest) => {
 
     const { searchParams } = new URL(request.url);
     const phone = searchParams.get("phone");
+    const name = searchParams.get("name");
 
     // Get the business_id using our utility function
     const businessId = await getBusinessId(request);
@@ -39,7 +40,13 @@ export const GET = async (request: NextRequest) => {
 
     // Apply filters if provided
     if (phone) {
-      query = query.eq("phone", phone);
+      // Use ilike for partial phone number matches
+      query = query.ilike("phone", `%${phone}%`);
+    }
+
+    if (name) {
+      // Use ilike for partial name matches
+      query = query.ilike("name", `%${name}%`);
     }
 
     // Execute query

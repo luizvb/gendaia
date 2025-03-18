@@ -122,6 +122,40 @@ export async function POST(request: NextRequest) {
 
     // Atualizar horários de funcionamento
     if (body.businessHours && Array.isArray(body.businessHours)) {
+      // Validate business hours
+      for (const hour of body.businessHours) {
+        if (hour.is_open) {
+          // If the business is open on this day, validate times
+          if (!hour.open_time || !hour.close_time) {
+            return NextResponse.json(
+              {
+                error:
+                  "Horários de abertura e fechamento são obrigatórios para dias abertos",
+              },
+              { status: 400 }
+            );
+          }
+
+          // Ensure close_time is after open_time
+          const open = hour.open_time.split(":");
+          const close = hour.close_time.split(":");
+          const openDate = new Date();
+          openDate.setHours(parseInt(open[0]), parseInt(open[1]), 0, 0);
+          const closeDate = new Date();
+          closeDate.setHours(parseInt(close[0]), parseInt(close[1]), 0, 0);
+
+          if (closeDate <= openDate) {
+            return NextResponse.json(
+              {
+                error:
+                  "O horário de fechamento deve ser posterior ao horário de abertura",
+              },
+              { status: 400 }
+            );
+          }
+        }
+      }
+
       // Primeiro, excluir os horários existentes
       const { error: deleteError } = await supabase
         .from("business_hours")
