@@ -21,6 +21,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { TimeInput } from "@/components/time-input";
 import { formatPrice } from "@/app/lib/stripe";
+import { formatPhoneNumber } from "@/lib/utils";
 
 export default function SettingsPage() {
   const [loading, setLoading] = useState(false);
@@ -149,10 +150,19 @@ export default function SettingsPage() {
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
     const { name, value } = e.target;
-    setBusinessInfo((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
+
+    // Apply phone number formatting for the phone field
+    if (name === "phone") {
+      setBusinessInfo((prev) => ({
+        ...prev,
+        [name]: formatPhoneNumber(value),
+      }));
+    } else {
+      setBusinessInfo((prev) => ({
+        ...prev,
+        [name]: value,
+      }));
+    }
   };
 
   const handleTimeChange = (
@@ -391,6 +401,7 @@ export default function SettingsPage() {
                     name="phone"
                     value={businessInfo.phone}
                     onChange={handleBusinessInfoChange}
+                    placeholder="+55 (11) 99999-9999"
                   />
                 </div>
               </div>

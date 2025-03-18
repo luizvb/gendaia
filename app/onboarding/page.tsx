@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { OnboardingSteps } from "@/components/onboarding-steps";
+import { formatPhoneNumber } from "@/lib/utils";
 
 const businessSchema = z.object({
   name: z.string().min(2, "Nome deve ter pelo menos 2 caracteres"),
@@ -33,7 +34,11 @@ const businessSchema = z.object({
   address: z.string().min(5, "Endereço deve ter pelo menos 5 caracteres"),
   phone: z
     .string()
-    .regex(/^\(\d{2}\)\s\d{4,5}-\d{4}$/, "Formato: (99) 99999-9999"),
+    .min(5, "Telefone inválido")
+    .regex(
+      /^\+\d{2}\s\(\d{2}\)/,
+      "Formato inválido. Use o formato brasileiro com código do país"
+    ),
   email: z.string().email("Email inválido").optional(),
 });
 
@@ -151,15 +156,11 @@ export default function OnboardingPage() {
                     <FormLabel>Telefone</FormLabel>
                     <FormControl>
                       <Input
-                        placeholder="Ex: (11) 99999-9999"
+                        placeholder="Ex: +55 (11) 99999-9999"
                         {...field}
+                        value={field.value}
                         onChange={(e) => {
-                          const value = e.target.value;
-                          const formatted = value
-                            .replace(/\D/g, "")
-                            .replace(/^(\d{2})(\d)/g, "($1) $2")
-                            .replace(/(\d)(\d{4})$/, "$1-$2");
-                          field.onChange(formatted);
+                          field.onChange(formatPhoneNumber(e.target.value));
                         }}
                       />
                     </FormControl>
