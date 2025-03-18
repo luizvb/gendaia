@@ -228,21 +228,22 @@ function calculateAvailableSlots(
   appointments: Appointment[],
   serviceDuration: number
 ): string[] {
-  // Converter a data de string para objeto Date usando timezone de SP
+  // Parse the date string
   const currentDate = parse(dateStr, "yyyy-MM-dd", new Date());
 
-  // Converter para timezone de SP
-  const zonedCurrentDate = toZonedTime(currentDate, SP_TIMEZONE);
+  // Create specific time strings for start and end of business hours
+  const startHour = BUSINESS_HOURS.start.hour.toString().padStart(2, "0");
+  const startMinute = BUSINESS_HOURS.start.minute.toString().padStart(2, "0");
+  const endHour = BUSINESS_HOURS.end.hour.toString().padStart(2, "0");
+  const endMinute = BUSINESS_HOURS.end.minute.toString().padStart(2, "0");
 
-  // Definir início e fim do dia de trabalho (no timezone de SP)
-  const dayStart = setMinutes(
-    setHours(zonedCurrentDate, BUSINESS_HOURS.start.hour),
-    BUSINESS_HOURS.start.minute
-  );
-  const dayEnd = setMinutes(
-    setHours(zonedCurrentDate, BUSINESS_HOURS.end.hour),
-    BUSINESS_HOURS.end.minute
-  );
+  // Create date strings with time in ISO format
+  const startDateStr = `${dateStr}T${startHour}:${startMinute}:00`;
+  const endDateStr = `${dateStr}T${endHour}:${endMinute}:00`;
+
+  // Parse these dates and convert to São Paulo timezone
+  const dayStart = toZonedTime(new Date(startDateStr), SP_TIMEZONE);
+  const dayEnd = toZonedTime(new Date(endDateStr), SP_TIMEZONE);
 
   // Inicializar array de slots disponíveis
   const availableSlots: string[] = [];
@@ -283,6 +284,7 @@ function calculateAvailableSlots(
     // Verificar se o slot inteiro cabe no horário de funcionamento
     // e se não há conflito com outros agendamentos
     if (slotEnd <= dayEnd && !hasConflict(currentSlot, slotEnd)) {
+      // Format the time consistently in São Paulo timezone
       availableSlots.push(formatInTimeZone(currentSlot, SP_TIMEZONE, "HH:mm"));
     }
 
