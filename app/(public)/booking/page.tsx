@@ -203,6 +203,7 @@ export default function BookingPage() {
         return;
       }
 
+      // Ensure we're using the correct timezone
       const spTimeZone = "America/Sao_Paulo";
       const formattedDate = formatInTimeZone(date, spTimeZone, "yyyy-MM-dd");
 
@@ -274,7 +275,8 @@ export default function BookingPage() {
       const [hours, minutes] = time.split(":").map(Number);
       const spTimeZone = "America/Sao_Paulo";
 
-      // Create base date with the selected time
+      // Create base date with the selected time - ensure we're using the correct timezone
+      // by creating a date in the browser's timezone first, then converting to the target timezone
       const baseDate = new Date(date);
       baseDate.setHours(hours, minutes, 0, 0);
 
@@ -284,8 +286,11 @@ export default function BookingPage() {
         spTimeZone,
         "yyyy-MM-dd'T'HH:mm:ssXXX"
       );
+
+      // Calculate end time by adding duration
       const endTime = new Date(baseDate);
       endTime.setMinutes(endTime.getMinutes() + duration);
+
       const endTimeISO = formatInTimeZone(
         endTime,
         spTimeZone,

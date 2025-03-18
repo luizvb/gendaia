@@ -8,10 +8,14 @@ import {
   setHours,
   setMinutes,
 } from "date-fns";
+import { toZonedTime } from "date-fns-tz";
 import { getBusinessId } from "@/lib/business-id";
 
 // Mark this route as dynamic to avoid static generation errors
 export const dynamic = "force-dynamic";
+
+// Set timezone for Brazil
+const TIMEZONE = "America/Sao_Paulo";
 
 interface Appointment {
   start_time: string;
@@ -111,26 +115,41 @@ export async function GET(request: NextRequest) {
 
       // Use provided date range if available, otherwise use days ahead
       if (startDate && endDate) {
-        startDateTime = parse(startDate, "yyyy-MM-dd", new Date());
-        endDateTime = parse(endDate, "yyyy-MM-dd", new Date());
+        // Parse dates as local dates in the specified timezone
+        startDateTime = toZonedTime(
+          parse(startDate, "yyyy-MM-dd", new Date()),
+          TIMEZONE
+        );
+        endDateTime = toZonedTime(
+          parse(endDate, "yyyy-MM-dd", new Date()),
+          TIMEZONE
+        );
       } else {
-        // Use days ahead from today
-        const today = new Date();
-        startDateTime = today;
-        endDateTime = addDays(today, daysAhead - 1);
+        // Use days ahead from today in the specified timezone
+        const today = toZonedTime(new Date(), TIMEZONE);
+        startDateTime = toZonedTime(today, TIMEZONE);
+        endDateTime = toZonedTime(addDays(today, daysAhead - 1), TIMEZONE);
       }
 
       // Generate dates for the specified interval
       const dates: string[] = [];
       let currentDate = startDateTime;
       while (currentDate <= endDateTime) {
-        dates.push(format(currentDate, "yyyy-MM-dd"));
+        // Convert to local date in the specified timezone for formatting
+        const zonedDate = toZonedTime(currentDate, TIMEZONE);
+        dates.push(format(zonedDate, "yyyy-MM-dd"));
         currentDate = addDays(currentDate, 1);
       }
 
       // Fetch all appointments for the interval
-      const formattedStartDate = format(startDateTime, "yyyy-MM-dd");
-      const formattedEndDate = format(addDays(endDateTime, 1), "yyyy-MM-dd");
+      const formattedStartDate = format(
+        toZonedTime(startDateTime, TIMEZONE),
+        "yyyy-MM-dd"
+      );
+      const formattedEndDate = format(
+        toZonedTime(addDays(endDateTime, 1), TIMEZONE),
+        "yyyy-MM-dd"
+      );
 
       let appointmentsQuery = supabase
         .from("appointments")
@@ -246,11 +265,14 @@ function calculateAvailableSlots(
   serviceDuration: number,
   businessHours: BusinessHours[]
 ): string[] {
-  // Convert date string to Date object
-  const currentDate = parse(dateStr, "yyyy-MM-dd", new Date());
+  // Convert date string to Date object in the specific timezone
+  const parsedDate = parse(dateStr, "yyyy-MM-dd", new Date());
+  const currentDate = toZonedTime(parsedDate, TIMEZONE);
 
   // Get the day of week (0 = Sunday, 1 = Monday, etc.)
-  const dayOfWeek = currentDate.getDay();
+  // Use local timezone for day of week calculation
+  const zonedDate = toZonedTime(currentDate, TIMEZONE);
+  const dayOfWeek = zonedDate.getDay();
 
   // Get business hours for this day
   const dayHours = businessHours.find((h) => h.day_of_week === dayOfWeek);
@@ -264,9 +286,15 @@ function calculateAvailableSlots(
   const [openHour, openMinute] = dayHours.open_time.split(":").map(Number);
   const [closeHour, closeMinute] = dayHours.close_time.split(":").map(Number);
 
-  // Set start and end of workday
-  const dayStart = setMinutes(setHours(currentDate, openHour), openMinute);
-  const dayEnd = setMinutes(setHours(currentDate, closeHour), closeMinute);
+  // Set start and end of workday in local timezone
+  const dayStart = toZonedTime(
+    setMinutes(setHours(zonedDate, openHour), openMinute),
+    TIMEZONE
+  );
+  const dayEnd = toZonedTime(
+    setMinutes(setHours(zonedDate, closeHour), closeMinute),
+    TIMEZONE
+  );
 
   // Initialize array of available slots
   const availableSlots: string[] = [];
@@ -279,9 +307,6 @@ function calculateAvailableSlots(
       const appointmentEnd = new Date(appointment.end_time);
 
       // Check for overlap between intervals
-      // An interval overlaps another if:
-      // - The start of the new is before the end of the existing AND
-      // - The end of the new is after the start of the existing
       return (
         (start < appointmentEnd && end > appointmentStart) ||
         // Also check specific cases of exact start/end
@@ -295,9 +320,9 @@ function calculateAvailableSlots(
     });
   };
 
-  // Function to check if a slot is in the past
+  // Function to check if a slot is in the past - using server-local now with timezone
   const isPast = (date: Date) => {
-    const now = new Date();
+    const now = toZonedTime(new Date(), TIMEZONE);
     return date < now;
   };
 
@@ -314,7 +339,9 @@ function calculateAvailableSlots(
       !hasConflict(currentSlot, serviceEnd) &&
       !isPast(currentSlot)
     ) {
-      availableSlots.push(format(currentSlot, "HH:mm"));
+      // Convert the slot time to the local timezone for display
+      const localSlotTime = toZonedTime(currentSlot, TIMEZONE);
+      availableSlots.push(format(localSlotTime, "HH:mm"));
     }
 
     // Move to next 15-minute slot
