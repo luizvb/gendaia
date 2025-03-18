@@ -3,19 +3,15 @@ import { createClient } from "@/lib/supabase/server";
 import {
   addDays,
   addMinutes,
-  format as formatDateFns,
+  format,
   parse,
   setHours,
   setMinutes,
 } from "date-fns";
-import { formatInTimeZone, toZonedTime } from "date-fns-tz";
 import { getBusinessId } from "@/lib/business-id";
 
 // Mark this route as dynamic to avoid static generation errors
 export const dynamic = "force-dynamic";
-
-// São Paulo timezone
-const SP_TIMEZONE = "America/Sao_Paulo";
 
 // Horário de funcionamento
 const BUSINESS_HOURS = {
@@ -84,15 +80,10 @@ export async function GET(request: NextRequest) {
       // Use provided date range if available, otherwise use days ahead
       if (startDate && endDate) {
         startDateTime = parse(startDate, "yyyy-MM-dd", new Date());
-        // Adjust to SP timezone
-        startDateTime = toZonedTime(startDateTime, SP_TIMEZONE);
-
         endDateTime = parse(endDate, "yyyy-MM-dd", new Date());
-        // Adjust to SP timezone
-        endDateTime = toZonedTime(endDateTime, SP_TIMEZONE);
       } else {
-        // Use days ahead from today - make sure this is in SP timezone
-        const today = toZonedTime(new Date(), SP_TIMEZONE);
+        // Use days ahead from today
+        const today = new Date();
         startDateTime = today;
         endDateTime = addDays(today, daysAhead - 1);
       }
@@ -101,21 +92,13 @@ export async function GET(request: NextRequest) {
       const dates: string[] = [];
       let currentDate = startDateTime;
       while (currentDate <= endDateTime) {
-        dates.push(formatInTimeZone(currentDate, SP_TIMEZONE, "yyyy-MM-dd"));
+        dates.push(format(currentDate, "yyyy-MM-dd"));
         currentDate = addDays(currentDate, 1);
       }
 
       // Buscar todos os agendamentos para o intervalo
-      const formattedStartDate = formatInTimeZone(
-        startDateTime,
-        SP_TIMEZONE,
-        "yyyy-MM-dd"
-      );
-      const formattedEndDate = formatInTimeZone(
-        addDays(endDateTime, 1),
-        SP_TIMEZONE,
-        "yyyy-MM-dd"
-      );
+      const formattedStartDate = format(startDateTime, "yyyy-MM-dd");
+      const formattedEndDate = format(addDays(endDateTime, 1), "yyyy-MM-dd");
 
       let appointmentsQuery = supabase
         .from("appointments")
@@ -228,22 +211,19 @@ function calculateAvailableSlots(
   appointments: Appointment[],
   serviceDuration: number
 ): string[] {
-  // Parse the date string
+  // Converter a data de string para objeto Date
   const currentDate = parse(dateStr, "yyyy-MM-dd", new Date());
 
-  // Create specific time strings for start and end of business hours
-  const startHour = BUSINESS_HOURS.start.hour.toString().padStart(2, "0");
-  const startMinute = BUSINESS_HOURS.start.minute.toString().padStart(2, "0");
-  const endHour = BUSINESS_HOURS.end.hour.toString().padStart(2, "0");
-  const endMinute = BUSINESS_HOURS.end.minute.toString().padStart(2, "0");
-
-  // Create date strings with time in ISO format
-  const startDateStr = `${dateStr}T${startHour}:${startMinute}:00`;
-  const endDateStr = `${dateStr}T${endHour}:${endMinute}:00`;
-
-  // Parse these dates and convert to São Paulo timezone
-  const dayStart = toZonedTime(new Date(startDateStr), SP_TIMEZONE);
-  const dayEnd = toZonedTime(new Date(endDateStr), SP_TIMEZONE);
+  // Definir início e fim do dia de trabalho
+  // Importante: Ao usar setHours/setMinutes, estamos trabalhando na timezone local do servidor
+  const dayStart = setMinutes(
+    setHours(currentDate, BUSINESS_HOURS.start.hour),
+    BUSINESS_HOURS.start.minute
+  );
+  const dayEnd = setMinutes(
+    setHours(currentDate, BUSINESS_HOURS.end.hour),
+    BUSINESS_HOURS.end.minute
+  );
 
   // Inicializar array de slots disponíveis
   const availableSlots: string[] = [];
@@ -252,12 +232,8 @@ function calculateAvailableSlots(
   // Função para verificar se um horário tem conflito com agendamentos existentes
   const hasConflict = (start: Date, end: Date) => {
     return (appointments || []).some((appointment: Appointment) => {
-      // Converter os horários de agendamento para o timezone de SP
-      const appointmentStartUTC = new Date(appointment.start_time);
-      const appointmentEndUTC = new Date(appointment.end_time);
-
-      const appointmentStart = toZonedTime(appointmentStartUTC, SP_TIMEZONE);
-      const appointmentEnd = toZonedTime(appointmentEndUTC, SP_TIMEZONE);
+      const appointmentStart = new Date(appointment.start_time);
+      const appointmentEnd = new Date(appointment.end_time);
 
       // Verificar se há sobreposição entre os intervalos
       // Um intervalo sobrepõe outro se:
@@ -284,8 +260,7 @@ function calculateAvailableSlots(
     // Verificar se o slot inteiro cabe no horário de funcionamento
     // e se não há conflito com outros agendamentos
     if (slotEnd <= dayEnd && !hasConflict(currentSlot, slotEnd)) {
-      // Format the time consistently in São Paulo timezone
-      availableSlots.push(formatInTimeZone(currentSlot, SP_TIMEZONE, "HH:mm"));
+      availableSlots.push(format(currentSlot, "HH:mm"));
     }
 
     // Avançar para o próximo slot de 15 minutos
