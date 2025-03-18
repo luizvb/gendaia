@@ -13,13 +13,6 @@ import { getBusinessId } from "@/lib/business-id";
 // Mark this route as dynamic to avoid static generation errors
 export const dynamic = "force-dynamic";
 
-// Horário de funcionamento
-const BUSINESS_HOURS = {
-  start: { hour: 9, minute: 0 }, // 9:00
-  end: { hour: 19, minute: 0 }, // 19:00
-  interval: 15, // minutos
-};
-
 interface Appointment {
   start_time: string;
   end_time: string;
@@ -31,6 +24,13 @@ interface ProfessionalAvailability {
   availability: {
     [date: string]: string[]; // date in format YYYY-MM-DD, array of available time slots
   };
+}
+
+interface BusinessHours {
+  day_of_week: number;
+  is_open: boolean;
+  open_time: string;
+  close_time: string;
 }
 
 export async function GET(request: NextRequest) {
@@ -55,26 +55,58 @@ export async function GET(request: NextRequest) {
         { status: 404 }
       );
     }
-    // Criar cliente Supabase e aguardar sua inicialização
+
+    // Create Supabase client
     const supabase = await createClient();
 
-    // Se fetchAll for true, buscar disponibilidade para todos os profissionais
+    // Fetch business hours first
+    const { data: businessHours, error: businessHoursError } = await supabase
+      .from("business_hours")
+      .select("*")
+      .eq("business_id", businessId);
+
+    if (businessHoursError) {
+      console.error("Error fetching business hours:", businessHoursError);
+      return NextResponse.json(
+        { error: "Failed to fetch business hours" },
+        { status: 500 }
+      );
+    }
+
+    // Default business hours if none are set
+    const defaultBusinessHours: BusinessHours[] = Array.from({ length: 7 }).map(
+      (_, i) => ({
+        day_of_week: i,
+        is_open: i !== 0 && i !== 6, // Closed on weekends by default
+        open_time: "09:00",
+        close_time: "19:00",
+        business_id: businessId,
+      })
+    );
+
+    // Use default hours if none are set
+    const hours =
+      businessHours && businessHours.length > 0
+        ? businessHours
+        : defaultBusinessHours;
+
+    // If fetchAll is true, fetch availability for all professionals
     if (fetchAll) {
-      // Buscar todos os profissionais
+      // Fetch all professionals
       const { data: professionals, error: professionalsError } = await supabase
         .from("professionals")
         .select("id, name, color, business_id")
         .eq("business_id", businessId);
 
       if (professionalsError) {
-        console.error("Erro ao buscar profissionais:", professionalsError);
+        console.error("Error fetching professionals:", professionalsError);
         return NextResponse.json(
-          { error: "Erro ao buscar profissionais" },
+          { error: "Error fetching professionals" },
           { status: 500 }
         );
       }
 
-      // Data inicial e final para o cálculo
+      // Initial and final date for calculation
       let startDateTime, endDateTime;
 
       // Use provided date range if available, otherwise use days ahead
@@ -88,7 +120,7 @@ export async function GET(request: NextRequest) {
         endDateTime = addDays(today, daysAhead - 1);
       }
 
-      // Datas para o intervalo especificado
+      // Generate dates for the specified interval
       const dates: string[] = [];
       let currentDate = startDateTime;
       while (currentDate <= endDateTime) {
@@ -96,7 +128,7 @@ export async function GET(request: NextRequest) {
         currentDate = addDays(currentDate, 1);
       }
 
-      // Buscar todos os agendamentos para o intervalo
+      // Fetch all appointments for the interval
       const formattedStartDate = format(startDateTime, "yyyy-MM-dd");
       const formattedEndDate = format(addDays(endDateTime, 1), "yyyy-MM-dd");
 
@@ -115,32 +147,33 @@ export async function GET(request: NextRequest) {
         await appointmentsQuery;
 
       if (appointmentsError) {
-        console.error("Erro ao buscar agendamentos:", appointmentsError);
+        console.error("Error fetching appointments:", appointmentsError);
         return NextResponse.json(
-          { error: "Erro ao buscar disponibilidade" },
+          { error: "Error fetching availability" },
           { status: 500 }
         );
       }
 
-      // Calcular disponibilidade para cada profissional e cada dia
+      // Calculate availability for each professional and each day
       const professionalAvailability: ProfessionalAvailability[] =
         professionals.map((professional) => {
           const availability: { [date: string]: string[] } = {};
 
-          // Para cada data, calcular slots disponíveis
+          // For each date, calculate available slots
           dates.forEach((dateStr) => {
-            // Filtrar agendamentos deste profissional para esta data
+            // Filter this professional's appointments for this date
             const professionalAppointments = allAppointments.filter(
               (app: Appointment) =>
                 app.professional_id === professional.id &&
                 app.start_time.startsWith(dateStr)
             );
 
-            // Calcular slots disponíveis para esta data
+            // Calculate available slots for this date
             const availableSlots = calculateAvailableSlots(
               dateStr,
               professionalAppointments,
-              serviceDuration
+              serviceDuration,
+              hours
             );
 
             availability[dateStr] = availableSlots;
@@ -156,9 +189,9 @@ export async function GET(request: NextRequest) {
         professionals_availability: professionalAvailability,
       });
     }
-    // Caso contrário, manter o comportamento original para um profissional específico
+    // Otherwise, maintain original behavior for a specific professional
     else if (professionalId && date) {
-      // Buscar agendamentos existentes para o profissional no dia
+      // Fetch existing appointments for the professional on that day
       let query = supabase
         .from("appointments")
         .select("start_time, end_time")
@@ -174,9 +207,9 @@ export async function GET(request: NextRequest) {
       const { data: appointments, error } = await query.order("start_time");
 
       if (error) {
-        console.error("Erro ao buscar agendamentos:", error);
+        console.error("Error fetching appointments:", error);
         return NextResponse.json(
-          { error: "Erro ao buscar disponibilidade" },
+          { error: "Error fetching availability" },
           { status: 500 }
         );
       }
@@ -184,87 +217,108 @@ export async function GET(request: NextRequest) {
       const availableSlots = calculateAvailableSlots(
         date,
         appointments,
-        serviceDuration
+        serviceDuration,
+        hours
       );
       return NextResponse.json({ available_slots: availableSlots });
     } else {
       return NextResponse.json(
         {
           error:
-            "Parâmetros inválidos. Use professional_id e date, ou fetch_all=true",
+            "Invalid parameters. Use professional_id and date, or fetch_all=true",
         },
         { status: 400 }
       );
     }
   } catch (error) {
-    console.error("Erro ao processar disponibilidade:", error);
+    console.error("Error processing availability:", error);
     return NextResponse.json(
-      { error: "Erro ao processar disponibilidade" },
+      { error: "Error processing availability" },
       { status: 500 }
     );
   }
 }
 
-// Função auxiliar para calcular slots disponíveis
+// Helper function to calculate available slots
 function calculateAvailableSlots(
   dateStr: string,
   appointments: Appointment[],
-  serviceDuration: number
+  serviceDuration: number,
+  businessHours: BusinessHours[]
 ): string[] {
-  // Converter a data de string para objeto Date
+  // Convert date string to Date object
   const currentDate = parse(dateStr, "yyyy-MM-dd", new Date());
 
-  // Definir início e fim do dia de trabalho
-  // Importante: Ao usar setHours/setMinutes, estamos trabalhando na timezone local do servidor
-  const dayStart = setMinutes(
-    setHours(currentDate, BUSINESS_HOURS.start.hour),
-    BUSINESS_HOURS.start.minute
-  );
-  const dayEnd = setMinutes(
-    setHours(currentDate, BUSINESS_HOURS.end.hour),
-    BUSINESS_HOURS.end.minute
-  );
+  // Get the day of week (0 = Sunday, 1 = Monday, etc.)
+  const dayOfWeek = currentDate.getDay();
 
-  // Inicializar array de slots disponíveis
+  // Get business hours for this day
+  const dayHours = businessHours.find((h) => h.day_of_week === dayOfWeek);
+
+  // If business is closed on this day or hours not found, return empty array
+  if (!dayHours || !dayHours.is_open) {
+    return [];
+  }
+
+  // Parse business hours
+  const [openHour, openMinute] = dayHours.open_time.split(":").map(Number);
+  const [closeHour, closeMinute] = dayHours.close_time.split(":").map(Number);
+
+  // Set start and end of workday
+  const dayStart = setMinutes(setHours(currentDate, openHour), openMinute);
+  const dayEnd = setMinutes(setHours(currentDate, closeHour), closeMinute);
+
+  // Initialize array of available slots
   const availableSlots: string[] = [];
   let currentSlot = dayStart;
 
-  // Função para verificar se um horário tem conflito com agendamentos existentes
+  // Function to check if a time conflicts with existing appointments
   const hasConflict = (start: Date, end: Date) => {
     return (appointments || []).some((appointment: Appointment) => {
       const appointmentStart = new Date(appointment.start_time);
       const appointmentEnd = new Date(appointment.end_time);
 
-      // Verificar se há sobreposição entre os intervalos
-      // Um intervalo sobrepõe outro se:
-      // - O início do novo é anterior ao fim do existente E
-      // - O fim do novo é posterior ao início do existente
+      // Check for overlap between intervals
+      // An interval overlaps another if:
+      // - The start of the new is before the end of the existing AND
+      // - The end of the new is after the start of the existing
       return (
         (start < appointmentEnd && end > appointmentStart) ||
-        // Também verificar casos específicos de início/fim exatamente iguais
+        // Also check specific cases of exact start/end
         start.getTime() === appointmentStart.getTime() ||
         end.getTime() === appointmentEnd.getTime() ||
-        // Verificar se o slot está completamente dentro de um agendamento
+        // Check if slot is completely within an appointment
         (start >= appointmentStart && end <= appointmentEnd) ||
-        // Verificar se o agendamento está completamente dentro do slot
+        // Check if appointment is completely within slot
         (appointmentStart >= start && appointmentEnd <= end)
       );
     });
   };
 
-  // Gerar slots disponíveis a cada 15 minutos
-  while (currentSlot < dayEnd) {
-    // Para cada slot de 15 minutos, verificamos se um serviço com a duração mínima (15 min) caberia
-    const slotEnd = addMinutes(currentSlot, 15);
+  // Function to check if a slot is in the past
+  const isPast = (date: Date) => {
+    const now = new Date();
+    return date < now;
+  };
 
-    // Verificar se o slot inteiro cabe no horário de funcionamento
-    // e se não há conflito com outros agendamentos
-    if (slotEnd <= dayEnd && !hasConflict(currentSlot, slotEnd)) {
+  // Generate available slots every 15 minutes
+  while (currentSlot < dayEnd) {
+    // For each 15-minute slot, we check if a service with the given duration would fit
+    const serviceEnd = addMinutes(currentSlot, serviceDuration);
+
+    // Check if the entire service fits within business hours
+    // and if there's no conflict with other appointments
+    // and if the slot is not in the past
+    if (
+      serviceEnd <= dayEnd &&
+      !hasConflict(currentSlot, serviceEnd) &&
+      !isPast(currentSlot)
+    ) {
       availableSlots.push(format(currentSlot, "HH:mm"));
     }
 
-    // Avançar para o próximo slot de 15 minutos
-    currentSlot = addMinutes(currentSlot, BUSINESS_HOURS.interval);
+    // Move to next 15-minute slot
+    currentSlot = addMinutes(currentSlot, 15);
   }
 
   return availableSlots;

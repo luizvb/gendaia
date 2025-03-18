@@ -207,9 +207,6 @@ export function AppointmentModal({
     if (!date || !professionalId || !serviceId) return;
 
     try {
-      // Flag to track if we've already shown an error message
-      let errorShown = false;
-
       setIsLoadingTimeSlots(true);
       const selectedService = services.find((s) => s.id === serviceId);
       if (!selectedService) return;
@@ -221,51 +218,15 @@ export function AppointmentModal({
         professionalsAvailability &&
         Object.keys(professionalsAvailability).length > 0
       ) {
-        // Get all available 15-minute slots
-        const allAvailableSlots =
+        // Get all available slots for the selected professional and date
+        const availableSlots =
           professionalsAvailability[professionalId]?.[formattedDate] || [];
 
-        // Filter slots based on service duration
-        // For services longer than 15 minutes, we need to ensure consecutive slots are available
-        const serviceDurationInMinutes = selectedService.duration;
-        const requiredConsecutiveSlots = Math.ceil(
-          serviceDurationInMinutes / 15
-        );
-
-        // Only keep slots that have enough consecutive slots available after them
-        const validSlots = allAvailableSlots.filter((slot, index) => {
-          // If we only need one slot (15 min service), this slot is valid
-          if (requiredConsecutiveSlots === 1) return true;
-
-          // For longer services, check if we have enough consecutive slots
-          const [hours, minutes] = slot.split(":").map(Number);
-          const slotTime = new Date(0, 0, 0, hours, minutes);
-
-          // Check if we have enough consecutive slots
-          for (let i = 1; i < requiredConsecutiveSlots; i++) {
-            // Calculate the next slot time (current + i*15 minutes)
-            const nextSlotTime = new Date(slotTime);
-            nextSlotTime.setMinutes(nextSlotTime.getMinutes() + i * 15);
-
-            // Format to HH:mm for comparison
-            const nextSlotFormatted = format(nextSlotTime, "HH:mm");
-
-            // If the next required slot is not available, this starting slot is not valid
-            if (!allAvailableSlots.includes(nextSlotFormatted)) {
-              return false;
-            }
-          }
-
-          // If we got here, all required consecutive slots are available
-          return true;
-        });
-
-        setTimeSlots(validSlots);
+        setTimeSlots(availableSlots);
 
         // If in edit mode, check if the current time is still available
-        if (isEditMode && time && !validSlots.includes(time)) {
-          // Keep the current time in edit mode even if not in available slots
-          // This is because the current appointment is occupying this slot
+        if (isEditMode && time && !availableSlots.includes(time)) {
+          // Check if this is the current appointment's time in edit mode
           if (selectedAppointment) {
             const appointmentTime = format(
               new Date(selectedAppointment.start_time),
@@ -275,17 +236,11 @@ export function AppointmentModal({
               // This is the current appointment's time, so it's valid
             } else {
               setTime("");
-              if (!errorShown) {
-                toast.error("O horário selecionado não está mais disponível");
-                errorShown = true;
-              }
+              toast.error("O horário selecionado não está mais disponível");
             }
           } else {
             setTime("");
-            if (!errorShown) {
-              toast.error("O horário selecionado não está mais disponível");
-              errorShown = true;
-            }
+            toast.error("O horário selecionado não está mais disponível");
           }
         }
 
@@ -305,9 +260,8 @@ export function AppointmentModal({
       const data = await response.json();
       setTimeSlots(data.available_slots);
 
-      // Se estiver em modo de edição, manter o horário atual se ainda estiver disponível
+      // Check if the current time is still available in edit mode
       if (isEditMode && time && !data.available_slots.includes(time)) {
-        // In edit mode, we need to check if this is the current appointment's time
         if (selectedAppointment) {
           const appointmentTime = format(
             new Date(selectedAppointment.start_time),
@@ -317,17 +271,11 @@ export function AppointmentModal({
             // This is the current appointment's time, so it's valid
           } else {
             setTime("");
-            if (!errorShown) {
-              toast.error("O horário selecionado não está mais disponível");
-              errorShown = true;
-            }
+            toast.error("O horário selecionado não está mais disponível");
           }
         } else {
           setTime("");
-          if (!errorShown) {
-            toast.error("O horário selecionado não está mais disponível");
-            errorShown = true;
-          }
+          toast.error("O horário selecionado não está mais disponível");
         }
       }
     } catch (error) {
@@ -348,163 +296,10 @@ export function AppointmentModal({
     professionalsAvailability,
   ]);
 
-  // Define checkAvailability with useCallback
-  const checkAvailability = useCallback(async () => {
-    if (!date || !professionalId || !serviceId) return;
-
-    try {
-      // Flag to track if we've already shown an error message
-      let errorShown = false;
-
-      const selectedService = services.find((s) => s.id === serviceId);
-      if (!selectedService) return;
-
-      const formattedDate = format(date, "yyyy-MM-dd");
-
-      // Check if we have pre-fetched availability data
-      if (
-        professionalsAvailability &&
-        Object.keys(professionalsAvailability).length > 0
-      ) {
-        // Get all available 15-minute slots
-        const allAvailableSlots =
-          professionalsAvailability[professionalId]?.[formattedDate] || [];
-
-        // Filter slots based on service duration
-        const serviceDurationInMinutes = selectedService.duration;
-        const requiredConsecutiveSlots = Math.ceil(
-          serviceDurationInMinutes / 15
-        );
-
-        // Only keep slots that have enough consecutive slots available after them
-        const validSlots = allAvailableSlots.filter((slot) => {
-          // If we only need one slot (15 min service), this slot is valid
-          if (requiredConsecutiveSlots === 1) return true;
-
-          // For longer services, check if we have enough consecutive slots
-          const [hours, minutes] = slot.split(":").map(Number);
-          const slotTime = new Date(0, 0, 0, hours, minutes);
-
-          // Check if we have enough consecutive slots
-          for (let i = 1; i < requiredConsecutiveSlots; i++) {
-            // Calculate the next slot time (current + i*15 minutes)
-            const nextSlotTime = new Date(slotTime);
-            nextSlotTime.setMinutes(nextSlotTime.getMinutes() + i * 15);
-
-            // Format to HH:mm for comparison
-            const nextSlotFormatted = format(nextSlotTime, "HH:mm");
-
-            // If the next required slot is not available, this starting slot is not valid
-            if (!allAvailableSlots.includes(nextSlotFormatted)) {
-              return false;
-            }
-          }
-
-          // If we got here, all required consecutive slots are available
-          return true;
-        });
-
-        const timeStr =
-          time || format(selectedSlot?.date || new Date(), "HH:mm");
-
-        // If the current time is not available, clear the selection
-        if (!validSlots.includes(timeStr)) {
-          // In edit mode, check if this is the current appointment's time
-          if (isEditMode && selectedAppointment) {
-            const appointmentTime = format(
-              new Date(selectedAppointment.start_time),
-              "HH:mm"
-            );
-
-            // Se o horário e o profissional são os mesmos do agendamento original, é válido
-            if (
-              appointmentTime === timeStr &&
-              selectedAppointment.professional_id.toString() === professionalId
-            ) {
-              // This is the current appointment's time, so it's valid
-            } else {
-              setTime("");
-              if (!errorShown) {
-                toast.error(
-                  "O horário selecionado não está mais disponível com este profissional"
-                );
-                errorShown = true;
-              }
-            }
-          } else {
-            setTime("");
-            if (!errorShown) {
-              toast.error(
-                "O horário selecionado não está mais disponível com este profissional"
-              );
-              errorShown = true;
-            }
-          }
-        }
-      } else {
-        // Fall back to API call if pre-fetched data is not available
-        const response = await fetch(
-          `/api/availability?professional_id=${professionalId}&date=${formattedDate}&service_duration=${selectedService.duration}`
-        );
-
-        if (!response.ok) {
-          throw new Error("Falha ao verificar disponibilidade");
-        }
-
-        const data = await response.json();
-        const timeStr =
-          time || format(selectedSlot?.date || new Date(), "HH:mm");
-
-        // If the current time is not available, clear the selection
-        if (!data.available_slots.includes(timeStr)) {
-          // In edit mode, check if this is the current appointment's time
-          if (isEditMode && selectedAppointment) {
-            const appointmentTime = format(
-              new Date(selectedAppointment.start_time),
-              "HH:mm"
-            );
-
-            // Se o horário e o profissional são os mesmos do agendamento original, é válido
-            if (
-              appointmentTime === timeStr &&
-              selectedAppointment.professional_id.toString() === professionalId
-            ) {
-              // This is the current appointment's time, so it's valid
-            } else {
-              setTime("");
-              if (!errorShown) {
-                toast.error(
-                  "O horário selecionado não está mais disponível com este profissional"
-                );
-                errorShown = true;
-              }
-            }
-          } else {
-            setTime("");
-            if (!errorShown) {
-              toast.error(
-                "O horário selecionado não está mais disponível com este profissional"
-              );
-              errorShown = true;
-            }
-          }
-        }
-      }
-    } catch (error) {
-      console.error("Erro ao verificar disponibilidade:", error);
-      toast.error("Não foi possível verificar a disponibilidade do horário");
-    }
-  }, [
-    date,
-    professionalId,
-    serviceId,
-    services,
-    time,
-    selectedSlot,
-    isEditMode,
-    selectedAppointment,
-    professionalsAvailability,
-  ]);
+  // Define checkAvailability with useCallback - just call fetchAvailableTimeSlots
+  const checkAvailability = useCallback(() => {
+    fetchAvailableTimeSlots();
+  }, [fetchAvailableTimeSlots]);
 
   // Select first service when services are loaded and no service is selected
   useEffect(() => {
@@ -601,93 +396,26 @@ export function AppointmentModal({
       }
       console.log("Profissional encontrado:", selectedProfessional);
 
-      // Verificar disponibilidade antes de criar/atualizar
-      console.log("Verificando disponibilidade...");
-      const formattedDate = format(startTime, "yyyy-MM-dd");
-      const timeStr = format(startTime, "HH:mm");
-
-      // Check if we have pre-fetched availability data
-      let isAvailable = false;
-
+      // Verify availability before creating/updating only if we're not in edit mode
+      // or if we've changed the professional or time in edit mode
       if (
-        professionalsAvailability &&
-        Object.keys(professionalsAvailability).length > 0
+        !isEditMode ||
+        (isEditMode &&
+          selectedAppointment &&
+          (selectedAppointment.professional_id.toString() !== professionalId ||
+            format(new Date(selectedAppointment.start_time), "HH:mm") !== time))
       ) {
-        const availableSlots =
-          professionalsAvailability[professionalId]?.[formattedDate] || [];
-        console.log("Disponibilidade verificada (cache):", {
-          availableSlots,
-          requestedTime: timeStr,
-        });
+        // Simple time format match check - no extra availability check needed
+        // since the API already filtered out unavailable times
+        const formattedDate = format(startTime, "yyyy-MM-dd");
+        const timeStr = format(startTime, "HH:mm");
 
-        // Se for edição, precisamos verificar se o horário é o mesmo do agendamento atual
-        // ou se está disponível na lista de slots
-        if (isEditMode && selectedAppointment) {
-          const appointmentTime = format(
-            new Date(selectedAppointment.start_time),
-            "HH:mm"
-          );
-
-          // Se o horário e o profissional são os mesmos do agendamento original, é válido
-          if (
-            appointmentTime === timeStr &&
-            selectedAppointment.professional_id.toString() === professionalId
-          ) {
-            isAvailable = true;
-          } else {
-            // Se mudou o horário ou o profissional, precisa verificar disponibilidade
-            isAvailable = availableSlots.includes(timeStr);
-          }
-        } else {
-          isAvailable = availableSlots.includes(timeStr);
+        // Check if the time exists in our timeslots list
+        if (!timeSlots.includes(timeStr)) {
+          console.log("Horário não disponível");
+          toast.error("Este horário não está mais disponível");
+          return;
         }
-      } else {
-        // Fall back to API call
-        const availabilityResponse = await fetch(
-          `/api/availability?professional_id=${professionalId}&date=${formattedDate}&service_duration=${selectedService.duration}`
-        );
-
-        if (!availabilityResponse.ok) {
-          console.log(
-            "Erro ao verificar disponibilidade:",
-            await availabilityResponse.text()
-          );
-          throw new Error("Falha ao verificar disponibilidade");
-        }
-
-        const availabilityData = await availabilityResponse.json();
-        console.log("Disponibilidade verificada (API):", {
-          availableSlots: availabilityData.available_slots,
-          requestedTime: timeStr,
-        });
-
-        // Se for edição, precisamos verificar se o horário é o mesmo do agendamento atual
-        // ou se está disponível na lista de slots
-        if (isEditMode && selectedAppointment) {
-          const appointmentTime = format(
-            new Date(selectedAppointment.start_time),
-            "HH:mm"
-          );
-
-          // Se o horário e o profissional são os mesmos do agendamento original, é válido
-          if (
-            appointmentTime === timeStr &&
-            selectedAppointment.professional_id.toString() === professionalId
-          ) {
-            isAvailable = true;
-          } else {
-            // Se mudou o horário ou o profissional, precisa verificar disponibilidade
-            isAvailable = availabilityData.available_slots.includes(timeStr);
-          }
-        } else {
-          isAvailable = availabilityData.available_slots.includes(timeStr);
-        }
-      }
-
-      if (!isAvailable) {
-        console.log("Horário não disponível");
-        toast.error("Este horário não está mais disponível");
-        return;
       }
 
       let clientId = selectedClientId;

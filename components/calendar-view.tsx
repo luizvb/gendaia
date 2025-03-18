@@ -388,10 +388,25 @@ export function CalendarView() {
       // Check if there are any appointments in this slot
       if (timeSlotAppointments.length > 0) return false;
 
-      // Check if it's within business hours
-      return isTimeSlotWithinBusinessHours(currentHour);
+      // Check if it's within business hours by looking at the availability data
+      const formattedDate = format(currentHour, "yyyy-MM-dd");
+      const timeStr = format(currentHour, "HH:mm");
+
+      // If we have a selected professional, check availability for that professional
+      if (selectedProfessional) {
+        return (
+          professionalsAvailability[selectedProfessional]?.[
+            formattedDate
+          ]?.includes(timeStr) || false
+        );
+      }
+
+      // If no professional is selected, the slot is available if any professional has it available
+      return Object.keys(professionalsAvailability).some((profId) =>
+        professionalsAvailability[profId]?.[formattedDate]?.includes(timeStr)
+      );
     },
-    [isTimeSlotWithinBusinessHours]
+    [professionalsAvailability, selectedProfessional]
   );
 
   // Gerar os horários do dia com base nos horários de funcionamento
@@ -915,10 +930,6 @@ export function CalendarView() {
                                 hour.getMinutes()
                               );
 
-                              // Check if this time slot is within business hours
-                              const isWithinBusinessHours =
-                                isTimeSlotWithinBusinessHours(currentHour);
-
                               // Get all appointments for this time slot
                               const timeSlotAppointments =
                                 filteredAppointments.filter((app) => {
@@ -942,12 +953,12 @@ export function CalendarView() {
                                 <div
                                   key={hourIndex}
                                   className={`group relative h-12 border-b border-dashed border-border ${
-                                    !isWithinBusinessHours || !isAvailable
+                                    !isAvailable
                                       ? "bg-gray-100 cursor-not-allowed"
                                       : "cursor-pointer"
                                   }`}
                                   onClick={() => {
-                                    if (isWithinBusinessHours && isAvailable) {
+                                    if (isAvailable) {
                                       openAppointmentModal(
                                         currentHour,
                                         selectedProfessional ||
@@ -1039,16 +1050,12 @@ export function CalendarView() {
                                     })}
                                     {timeSlotAppointments.length === 0 && (
                                       <div className="absolute inset-0 flex cursor-pointer items-center justify-center opacity-0 transition-opacity group-hover:opacity-100">
-                                        {isWithinBusinessHours &&
-                                          isAvailable && (
-                                            <Plus className="h-4 w-4" />
-                                          )}
-                                        {(!isWithinBusinessHours ||
-                                          !isAvailable) && (
+                                        {isAvailable && (
+                                          <Plus className="h-4 w-4" />
+                                        )}
+                                        {!isAvailable && (
                                           <span className="text-xs text-gray-400">
-                                            {!isWithinBusinessHours
-                                              ? "Fechado"
-                                              : "Indisponível"}
+                                            Indisponível
                                           </span>
                                         )}
                                       </div>
