@@ -3,15 +3,19 @@ import { createClient } from "@/lib/supabase/server";
 import {
   addDays,
   addMinutes,
-  format,
+  format as formatDateFns,
   parse,
   setHours,
   setMinutes,
 } from "date-fns";
+import { formatInTimeZone, toZonedTime } from "date-fns-tz";
 import { getBusinessId } from "@/lib/business-id";
 
 // Mark this route as dynamic to avoid static generation errors
 export const dynamic = "force-dynamic";
+
+// São Paulo timezone
+const SP_TIMEZONE = "America/Sao_Paulo";
 
 // Horário de funcionamento
 const BUSINESS_HOURS = {
@@ -80,10 +84,15 @@ export async function GET(request: NextRequest) {
       // Use provided date range if available, otherwise use days ahead
       if (startDate && endDate) {
         startDateTime = parse(startDate, "yyyy-MM-dd", new Date());
+        // Adjust to SP timezone
+        startDateTime = toZonedTime(startDateTime, SP_TIMEZONE);
+
         endDateTime = parse(endDate, "yyyy-MM-dd", new Date());
+        // Adjust to SP timezone
+        endDateTime = toZonedTime(endDateTime, SP_TIMEZONE);
       } else {
-        // Use days ahead from today
-        const today = new Date();
+        // Use days ahead from today - make sure this is in SP timezone
+        const today = toZonedTime(new Date(), SP_TIMEZONE);
         startDateTime = today;
         endDateTime = addDays(today, daysAhead - 1);
       }
@@ -92,13 +101,21 @@ export async function GET(request: NextRequest) {
       const dates: string[] = [];
       let currentDate = startDateTime;
       while (currentDate <= endDateTime) {
-        dates.push(format(currentDate, "yyyy-MM-dd"));
+        dates.push(formatInTimeZone(currentDate, SP_TIMEZONE, "yyyy-MM-dd"));
         currentDate = addDays(currentDate, 1);
       }
 
       // Buscar todos os agendamentos para o intervalo
-      const formattedStartDate = format(startDateTime, "yyyy-MM-dd");
-      const formattedEndDate = format(addDays(endDateTime, 1), "yyyy-MM-dd");
+      const formattedStartDate = formatInTimeZone(
+        startDateTime,
+        SP_TIMEZONE,
+        "yyyy-MM-dd"
+      );
+      const formattedEndDate = formatInTimeZone(
+        addDays(endDateTime, 1),
+        SP_TIMEZONE,
+        "yyyy-MM-dd"
+      );
 
       let appointmentsQuery = supabase
         .from("appointments")
@@ -211,16 +228,19 @@ function calculateAvailableSlots(
   appointments: Appointment[],
   serviceDuration: number
 ): string[] {
-  // Converter a data de string para objeto Date
+  // Converter a data de string para objeto Date usando timezone de SP
   const currentDate = parse(dateStr, "yyyy-MM-dd", new Date());
 
-  // Definir início e fim do dia de trabalho
+  // Converter para timezone de SP
+  const zonedCurrentDate = toZonedTime(currentDate, SP_TIMEZONE);
+
+  // Definir início e fim do dia de trabalho (no timezone de SP)
   const dayStart = setMinutes(
-    setHours(currentDate, BUSINESS_HOURS.start.hour),
+    setHours(zonedCurrentDate, BUSINESS_HOURS.start.hour),
     BUSINESS_HOURS.start.minute
   );
   const dayEnd = setMinutes(
-    setHours(currentDate, BUSINESS_HOURS.end.hour),
+    setHours(zonedCurrentDate, BUSINESS_HOURS.end.hour),
     BUSINESS_HOURS.end.minute
   );
 
@@ -231,8 +251,12 @@ function calculateAvailableSlots(
   // Função para verificar se um horário tem conflito com agendamentos existentes
   const hasConflict = (start: Date, end: Date) => {
     return (appointments || []).some((appointment: Appointment) => {
-      const appointmentStart = new Date(appointment.start_time);
-      const appointmentEnd = new Date(appointment.end_time);
+      // Converter os horários de agendamento para o timezone de SP
+      const appointmentStartUTC = new Date(appointment.start_time);
+      const appointmentEndUTC = new Date(appointment.end_time);
+
+      const appointmentStart = toZonedTime(appointmentStartUTC, SP_TIMEZONE);
+      const appointmentEnd = toZonedTime(appointmentEndUTC, SP_TIMEZONE);
 
       // Verificar se há sobreposição entre os intervalos
       // Um intervalo sobrepõe outro se:
@@ -259,7 +283,7 @@ function calculateAvailableSlots(
     // Verificar se o slot inteiro cabe no horário de funcionamento
     // e se não há conflito com outros agendamentos
     if (slotEnd <= dayEnd && !hasConflict(currentSlot, slotEnd)) {
-      availableSlots.push(format(currentSlot, "HH:mm"));
+      availableSlots.push(formatInTimeZone(currentSlot, SP_TIMEZONE, "HH:mm"));
     }
 
     // Avançar para o próximo slot de 15 minutos
