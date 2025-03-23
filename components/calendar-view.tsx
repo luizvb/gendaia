@@ -562,6 +562,46 @@ export function CalendarView() {
     return slots;
   }, [daysToShow, businessHours]);
 
+  // Check if a slot is unavailable for the selected professional(s)
+  const isSlotUnavailable = useCallback(
+    (date: Date, professionalId: string | null) => {
+      // If there are appointments for this slot, don't mark as unavailable
+      const existingAppointments = getTimeSlotAppointments(date);
+      if (existingAppointments.length > 0) {
+        return false;
+      }
+
+      const formattedDate = format(date, "yyyy-MM-dd");
+      const formattedTime = format(date, "HH:mm");
+
+      if (professionalId) {
+        // Check for specific professional
+        return (
+          professionalsAvailability[professionalId] &&
+          professionalsAvailability[professionalId][formattedDate] &&
+          !professionalsAvailability[professionalId][formattedDate].includes(
+            formattedTime
+          )
+        );
+      } else if (professionals.length > 0) {
+        // No professional selected, check if unavailable for all professionals
+        return professionals.every((prof) => {
+          const profId = prof.id;
+          return (
+            professionalsAvailability[profId] &&
+            professionalsAvailability[profId][formattedDate] &&
+            !professionalsAvailability[profId][formattedDate].includes(
+              formattedTime
+            )
+          );
+        });
+      }
+
+      return false;
+    },
+    [professionalsAvailability, professionals, getTimeSlotAppointments]
+  );
+
   // Obter o profissional pelo ID
   const getProfessional = (id: number | string) => {
     const idString = id.toString();
@@ -890,13 +930,31 @@ export function CalendarView() {
                                   key={hourIndex}
                                   className="group relative h-12 border-b border-dashed border-border cursor-pointer"
                                   onClick={() => {
-                                    openAppointmentModal(
-                                      currentHour,
-                                      selectedProfessional ||
-                                        professionals[0]?.id
-                                    );
+                                    // Only open modal if slot is available
+                                    if (
+                                      !isSlotUnavailable(
+                                        currentHour,
+                                        selectedProfessional
+                                      )
+                                    ) {
+                                      openAppointmentModal(
+                                        currentHour,
+                                        selectedProfessional ||
+                                          professionals[0]?.id
+                                      );
+                                    }
                                   }}
                                 >
+                                  {/* Show unavailable overlay if the slot is unavailable */}
+                                  {isSlotUnavailable(
+                                    currentHour,
+                                    selectedProfessional
+                                  ) && (
+                                    <div className="absolute inset-0 flex items-center justify-center bg-gray-200/80 text-gray-600 text-xs font-medium z-30">
+                                      Horário indisponível
+                                    </div>
+                                  )}
+
                                   {/* Remover o debug de tempo para produção */}
                                   <div className="absolute inset-0 flex flex-col gap-1 p-1">
                                     {(() => {
