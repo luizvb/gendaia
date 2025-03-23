@@ -339,6 +339,11 @@ export function CalendarView() {
     [businessHours]
   );
 
+  // Filter out closed days from visibleDays
+  const filteredDaysToShow = useMemo(() => {
+    return daysToShow.filter((day) => isDayOpen(day));
+  }, [daysToShow, isDayOpen]);
+
   // Fix for the appointment display in the calendar
   const renderAppointmentTimes = (appointment: Appointment) => {
     const start = new Date(appointment.start_time);
@@ -352,7 +357,7 @@ export function CalendarView() {
   };
 
   // Determinar quantos dias mostrar com base na largura da tela (para mobile)
-  const [visibleDays, setVisibleDays] = useState(daysToShow);
+  const [visibleDays, setVisibleDays] = useState(filteredDaysToShow);
 
   const currentDateTimestamp = currentDate.getTime();
 
@@ -391,17 +396,17 @@ export function CalendarView() {
     const handleResize = () => {
       if (window.innerWidth < 640 && view === "week") {
         // Mostrar 4 dias no modo responsivo
-        const newVisibleDays = [...weekDays].slice(0, 4);
+        const newVisibleDays = [...filteredDaysToShow].slice(0, 4);
         setVisibleDays(newVisibleDays);
       } else {
-        setVisibleDays(daysToShow);
+        setVisibleDays(filteredDaysToShow);
       }
     };
 
     handleResize();
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
-  }, [view, weekDays, daysToShow]);
+  }, [view, weekDays, filteredDaysToShow]);
 
   // Manter um estado separado para o índice do primeiro dia visível no modo responsivo
   const [firstVisibleDayIndex, setFirstVisibleDayIndex] = useState(0);
@@ -410,15 +415,20 @@ export function CalendarView() {
   useEffect(() => {
     if (window.innerWidth < 640 && view === "week") {
       // Garantir que o índice não ultrapasse o limite
-      const safeIndex = Math.min(firstVisibleDayIndex, 3);
-      setVisibleDays(weekDays.slice(safeIndex, safeIndex + 4));
+      const maxIndex = Math.max(0, filteredDaysToShow.length - 4);
+      const safeIndex = Math.min(firstVisibleDayIndex, maxIndex);
+      setVisibleDays(filteredDaysToShow.slice(safeIndex, safeIndex + 4));
     }
-  }, [firstVisibleDayIndex, weekDays, view]);
+  }, [firstVisibleDayIndex, filteredDaysToShow, view]);
 
   const prev = () => {
     if (view === "day") {
-      // No modo dia, apenas volta um dia
-      setCurrentDate(addDays(currentDate, -1));
+      // No modo dia, encontrar o dia anterior que está aberto
+      let prevDay = addDays(currentDate, -1);
+      while (!isDayOpen(prevDay)) {
+        prevDay = addDays(prevDay, -1);
+      }
+      setCurrentDate(prevDay);
     } else if (window.innerWidth < 640) {
       // No modo semana responsivo, navega pelos dias visíveis
       if (firstVisibleDayIndex > 0) {
@@ -427,7 +437,7 @@ export function CalendarView() {
       } else {
         // Se já estamos no início da semana, vamos para a semana anterior
         setCurrentDate(addDays(currentDate, -7));
-        setFirstVisibleDayIndex(3); // Começar do final da nova semana
+        setFirstVisibleDayIndex(Math.max(0, filteredDaysToShow.length - 4));
       }
     } else {
       // No modo semana desktop, volta uma semana inteira
@@ -437,17 +447,21 @@ export function CalendarView() {
 
   const next = () => {
     if (view === "day") {
-      // No modo dia, apenas avança um dia
-      setCurrentDate(addDays(currentDate, 1));
+      // No modo dia, encontrar o próximo dia que está aberto
+      let nextDay = addDays(currentDate, 1);
+      while (!isDayOpen(nextDay)) {
+        nextDay = addDays(nextDay, 1);
+      }
+      setCurrentDate(nextDay);
     } else if (window.innerWidth < 640) {
       // No modo semana responsivo, navega pelos dias visíveis
-      if (firstVisibleDayIndex < 3) {
+      if (firstVisibleDayIndex < Math.max(0, filteredDaysToShow.length - 4)) {
         // Se ainda há dias seguintes na semana, apenas atualiza o índice
         setFirstVisibleDayIndex(firstVisibleDayIndex + 1);
       } else {
         // Se já estamos no final da semana, vamos para a próxima semana
         setCurrentDate(addDays(currentDate, 7));
-        setFirstVisibleDayIndex(0); // Começar do início da nova semana
+        setFirstVisibleDayIndex(0);
       }
     } else {
       // No modo semana desktop, avança uma semana inteira
@@ -819,39 +833,22 @@ export function CalendarView() {
 
           {/* Cabeçalhos dos dias */}
           <div className={`flex flex-grow ${view === "day" ? "" : "divide-x"}`}>
-            {visibleDays.map((day, i) => {
-              const isOpen = isDayOpen(day);
-              return (
-                <div
-                  key={i}
-                  className={cn(
-                    "flex-1 flex h-12 flex-col items-center justify-center",
-                    isSameDay(day, new Date()) && "bg-accent",
-                    !isOpen && "bg-gray-100"
-                  )}
-                >
-                  <span
-                    className={cn(
-                      "text-xs font-medium",
-                      !isOpen ? "text-gray-500" : "text-muted-foreground"
-                    )}
-                  >
-                    {format(day, "EEE", { locale: ptBR })}
-                  </span>
-                  <span
-                    className={cn(
-                      "text-sm font-semibold",
-                      !isOpen && "text-gray-500"
-                    )}
-                  >
-                    {format(day, "dd")}
-                  </span>
-                  {!isOpen && (
-                    <span className="text-[10px] text-gray-500">Fechado</span>
-                  )}
-                </div>
-              );
-            })}
+            {visibleDays.map((day, i) => (
+              <div
+                key={i}
+                className={cn(
+                  "flex-1 flex h-12 flex-col items-center justify-center",
+                  isSameDay(day, new Date()) && "bg-accent"
+                )}
+              >
+                <span className="text-xs font-medium text-muted-foreground">
+                  {format(day, "EEE", { locale: ptBR })}
+                </span>
+                <span className="text-sm font-semibold">
+                  {format(day, "dd")}
+                </span>
+              </div>
+            ))}
           </div>
         </div>
 
@@ -895,283 +892,264 @@ export function CalendarView() {
                 <div
                   className={`flex w-full ${view === "day" ? "" : "divide-x"}`}
                 >
-                  {visibleDays.map((day, dayIndex) => {
-                    const isOpen = isDayOpen(day);
-                    return (
-                      <div
-                        key={dayIndex}
-                        className={`flex-1 min-w-0 ${
-                          !isOpen ? "bg-gray-100" : ""
-                        }`}
-                      >
-                        {isOpen ? (
-                          dayHours
-                            .filter(
-                              (hour) =>
-                                hour.getFullYear() === day.getFullYear() &&
-                                hour.getMonth() === day.getMonth() &&
-                                hour.getDate() === day.getDate()
-                            )
-                            .map((hour, hourIndex) => {
-                              const currentHour = new Date(
-                                day.getFullYear(),
-                                day.getMonth(),
-                                day.getDate(),
-                                hour.getHours(),
-                                hour.getMinutes()
-                              );
+                  {visibleDays.map((day, dayIndex) => (
+                    <div key={dayIndex} className="flex-1 min-w-0">
+                      {dayHours
+                        .filter(
+                          (hour) =>
+                            hour.getFullYear() === day.getFullYear() &&
+                            hour.getMonth() === day.getMonth() &&
+                            hour.getDate() === day.getDate()
+                        )
+                        .map((hour, hourIndex) => {
+                          const currentHour = new Date(
+                            day.getFullYear(),
+                            day.getMonth(),
+                            day.getDate(),
+                            hour.getHours(),
+                            hour.getMinutes()
+                          );
 
-                              // Get all appointments for this time slot
-                              const timeSlotAppointments =
-                                getTimeSlotAppointments(currentHour);
+                          // Get all appointments for this time slot
+                          const timeSlotAppointments =
+                            getTimeSlotAppointments(currentHour);
 
-                              return (
-                                <div
-                                  key={hourIndex}
-                                  className="group relative h-12 border-b border-dashed border-border cursor-pointer"
-                                  onClick={() => {
-                                    // Only open modal if slot is available
-                                    if (
-                                      !isSlotUnavailable(
-                                        currentHour,
-                                        selectedProfessional
-                                      )
-                                    ) {
-                                      openAppointmentModal(
-                                        currentHour,
-                                        selectedProfessional ||
-                                          professionals[0]?.id
-                                      );
-                                    }
-                                  }}
-                                >
-                                  {/* Show unavailable overlay if the slot is unavailable */}
-                                  {isSlotUnavailable(
+                          return (
+                            <div
+                              key={hourIndex}
+                              className="group relative h-12 border-b border-dashed border-border cursor-pointer"
+                              onClick={() => {
+                                // Only open modal if slot is available
+                                if (
+                                  !isSlotUnavailable(
                                     currentHour,
                                     selectedProfessional
-                                  ) && (
-                                    <div className="absolute inset-0 flex items-center justify-center bg-gray-200/80 text-gray-600 text-xs font-medium z-30">
-                                      Horário indisponível
-                                    </div>
-                                  )}
+                                  )
+                                ) {
+                                  openAppointmentModal(
+                                    currentHour,
+                                    selectedProfessional || professionals[0]?.id
+                                  );
+                                }
+                              }}
+                            >
+                              {/* Show unavailable overlay if the slot is unavailable */}
+                              {isSlotUnavailable(
+                                currentHour,
+                                selectedProfessional
+                              ) && (
+                                <div className="absolute inset-0 flex items-center justify-center bg-gray-200/80 text-gray-600 text-xs font-medium z-30">
+                                  Horário indisponível
+                                </div>
+                              )}
 
-                                  {/* Remover o debug de tempo para produção */}
-                                  <div className="absolute inset-0 flex flex-col gap-1 p-1">
-                                    {(() => {
-                                      // Group appointments by professional to handle overlaps
-                                      const appointmentsByProfessional =
-                                        timeSlotAppointments.reduce(
-                                          (acc, appointment) => {
-                                            const profId =
-                                              appointment.professional_id.toString();
-                                            if (!acc[profId]) acc[profId] = [];
-                                            acc[profId].push(appointment);
-                                            return acc;
-                                          },
-                                          {} as Record<string, Appointment[]>
-                                        );
+                              {/* Remover o debug de tempo para produção */}
+                              <div className="absolute inset-0 flex flex-col gap-1 p-1">
+                                {(() => {
+                                  // Group appointments by professional to handle overlaps
+                                  const appointmentsByProfessional =
+                                    timeSlotAppointments.reduce(
+                                      (acc, appointment) => {
+                                        const profId =
+                                          appointment.professional_id.toString();
+                                        if (!acc[profId]) acc[profId] = [];
+                                        acc[profId].push(appointment);
+                                        return acc;
+                                      },
+                                      {} as Record<string, Appointment[]>
+                                    );
 
-                                      const professionalIds = Object.keys(
-                                        appointmentsByProfessional
+                                  const professionalIds = Object.keys(
+                                    appointmentsByProfessional
+                                  );
+                                  const totalProfessionals =
+                                    professionalIds.length;
+
+                                  return timeSlotAppointments.map(
+                                    (appointment, index) => {
+                                      const professional = getProfessional(
+                                        appointment.professional_id
                                       );
-                                      const totalProfessionals =
-                                        professionalIds.length;
+                                      const startTime = new Date(
+                                        appointment.start_time
+                                      );
+                                      const endTime = new Date(
+                                        appointment.end_time
+                                      );
+                                      const durationInMinutes =
+                                        (endTime.getTime() -
+                                          startTime.getTime()) /
+                                        (1000 * 60);
 
-                                      return timeSlotAppointments.map(
-                                        (appointment, index) => {
-                                          const professional = getProfessional(
-                                            appointment.professional_id
-                                          );
-                                          const startTime = new Date(
-                                            appointment.start_time
-                                          );
-                                          const endTime = new Date(
-                                            appointment.end_time
-                                          );
-                                          const durationInMinutes =
-                                            (endTime.getTime() -
-                                              startTime.getTime()) /
-                                            (1000 * 60);
+                                      // Calculate height based on duration
+                                      const heightInSlots =
+                                        (durationInMinutes / 15) * 48;
 
-                                          // Calculate height based on duration
-                                          const heightInSlots =
-                                            (durationInMinutes / 15) * 48;
+                                      // Only render the appointment at its start time slot
+                                      if (
+                                        startTime.getHours() !==
+                                          currentHour.getHours() ||
+                                        startTime.getMinutes() !==
+                                          currentHour.getMinutes()
+                                      ) {
+                                        return null;
+                                      }
 
-                                          // Only render the appointment at its start time slot
-                                          if (
-                                            startTime.getHours() !==
-                                              currentHour.getHours() ||
-                                            startTime.getMinutes() !==
-                                              currentHour.getMinutes()
-                                          ) {
-                                            return null;
-                                          }
+                                      // Calculate position for side-by-side display
+                                      const profIndex =
+                                        professionalIds.findIndex(
+                                          (id) =>
+                                            id ===
+                                            appointment.professional_id.toString()
+                                        );
+                                      const width =
+                                        totalProfessionals > 1
+                                          ? `${100 / totalProfessionals}%`
+                                          : "100%";
+                                      const left =
+                                        totalProfessionals > 1
+                                          ? `${
+                                              (profIndex * 100) /
+                                              totalProfessionals
+                                            }%`
+                                          : "0";
 
-                                          // Calculate position for side-by-side display
-                                          const profIndex =
-                                            professionalIds.findIndex(
-                                              (id) =>
-                                                id ===
-                                                appointment.professional_id.toString()
+                                      return (
+                                        <div
+                                          key={appointment.id}
+                                          className="absolute flex flex-col rounded-md p-1 text-xs text-white cursor-pointer hover:brightness-90 transition-all overflow-hidden"
+                                          style={{
+                                            backgroundColor:
+                                              professional?.color || "#3b82f6",
+                                            height: `${heightInSlots}px`,
+                                            zIndex: 10,
+                                            top: 0,
+                                            minHeight: "24px",
+                                            width,
+                                            left,
+                                            right:
+                                              totalProfessionals > 1
+                                                ? "auto"
+                                                : 0,
+                                          }}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            openAppointmentModal(
+                                              currentHour,
+                                              professional?.id || "",
+                                              appointment
                                             );
-                                          const width =
-                                            totalProfessionals > 1
-                                              ? `${100 / totalProfessionals}%`
-                                              : "100%";
-                                          const left =
-                                            totalProfessionals > 1
-                                              ? `${
-                                                  (profIndex * 100) /
-                                                  totalProfessionals
-                                                }%`
-                                              : "0";
-
-                                          return (
-                                            <div
-                                              key={appointment.id}
-                                              className="absolute flex flex-col rounded-md p-1 text-xs text-white cursor-pointer hover:brightness-90 transition-all overflow-hidden"
-                                              style={{
-                                                backgroundColor:
-                                                  professional?.color ||
-                                                  "#3b82f6",
-                                                height: `${heightInSlots}px`,
-                                                zIndex: 10,
-                                                top: 0,
-                                                minHeight: "24px",
-                                                width,
-                                                left,
-                                                right:
-                                                  totalProfessionals > 1
-                                                    ? "auto"
-                                                    : 0,
-                                              }}
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                openAppointmentModal(
-                                                  currentHour,
-                                                  professional?.id || "",
+                                          }}
+                                        >
+                                          <div className="flex flex-col justify-between min-h-0 h-full">
+                                            <div className="flex flex-col gap-0.5 min-w-0">
+                                              <div className="flex items-center justify-between">
+                                                <span className="font-medium truncate">
+                                                  {appointment.clients.name}
+                                                </span>
+                                                {renderAppointmentTimes(
                                                   appointment
-                                                );
-                                              }}
-                                            >
-                                              <div className="flex flex-col justify-between min-h-0 h-full">
-                                                <div className="flex flex-col gap-0.5 min-w-0">
-                                                  <div className="flex items-center justify-between">
-                                                    <span className="font-medium truncate">
-                                                      {appointment.clients.name}
+                                                )}
+                                              </div>
+
+                                              {/* Show service name if height allows */}
+                                              {heightInSlots >= 30 && (
+                                                <div className="flex items-center gap-1">
+                                                  <span className="truncate font-medium opacity-90">
+                                                    {appointment.services.name}
+                                                  </span>
+                                                </div>
+                                              )}
+
+                                              {/* Show professional name if height allows */}
+                                              {heightInSlots >= 45 &&
+                                                professional && (
+                                                  <div className="flex items-center gap-1 mt-1 text-[10px]">
+                                                    <span className="opacity-80">
+                                                      Profissional:{" "}
+                                                      {professional.name}
                                                     </span>
-                                                    {renderAppointmentTimes(
-                                                      appointment
-                                                    )}
                                                   </div>
+                                                )}
 
-                                                  {/* Show service name if height allows */}
-                                                  {heightInSlots >= 30 && (
-                                                    <div className="flex items-center gap-1">
-                                                      <span className="truncate font-medium opacity-90">
-                                                        {
-                                                          appointment.services
-                                                            .name
-                                                        }
-                                                      </span>
-                                                    </div>
-                                                  )}
-
-                                                  {/* Show professional name if height allows */}
-                                                  {heightInSlots >= 45 &&
-                                                    professional && (
-                                                      <div className="flex items-center gap-1 mt-1 text-[10px]">
-                                                        <span className="opacity-80">
-                                                          Profissional:{" "}
-                                                          {professional.name}
-                                                        </span>
-                                                      </div>
-                                                    )}
-
-                                                  {/* Show client phone if we have it and height allows */}
-                                                  {heightInSlots >= 60 && (
-                                                    <div className="flex items-center gap-1 text-[10px]">
-                                                      {clients.find(
-                                                        (c) =>
-                                                          c.id ===
-                                                          appointment.client_id
-                                                      )?.phone && (
-                                                        <span className="opacity-80">
-                                                          Celular:{" "}
-                                                          {
-                                                            clients.find(
-                                                              (c) =>
-                                                                c.id ===
-                                                                appointment.client_id
-                                                            )?.phone
-                                                          }
-                                                        </span>
-                                                      )}
-                                                    </div>
-                                                  )}
-
-                                                  {/* Show service details if height allows */}
-                                                  {heightInSlots >= 75 && (
-                                                    <div className="flex items-center gap-2 mt-1 text-[10px]">
-                                                      {services.find(
-                                                        (s) =>
-                                                          s.id ===
-                                                          appointment.service_id.toString()
-                                                      )?.duration && (
-                                                        <span className="opacity-80">
-                                                          Duração:{" "}
-                                                          {
-                                                            services.find(
-                                                              (s) =>
-                                                                s.id ===
-                                                                appointment.service_id.toString()
-                                                            )?.duration
-                                                          }
-                                                          min
-                                                        </span>
-                                                      )}
-                                                      {services.find(
-                                                        (s) =>
-                                                          s.id ===
-                                                          appointment.service_id.toString()
-                                                      )?.price && (
-                                                        <span className="opacity-80">
-                                                          R${" "}
-                                                          {services
-                                                            .find(
-                                                              (s) =>
-                                                                s.id ===
-                                                                appointment.service_id.toString()
-                                                            )
-                                                            ?.price.toFixed(2)}
-                                                        </span>
-                                                      )}
-                                                    </div>
+                                              {/* Show client phone if we have it and height allows */}
+                                              {heightInSlots >= 60 && (
+                                                <div className="flex items-center gap-1 text-[10px]">
+                                                  {clients.find(
+                                                    (c) =>
+                                                      c.id ===
+                                                      appointment.client_id
+                                                  )?.phone && (
+                                                    <span className="opacity-80">
+                                                      Celular:{" "}
+                                                      {
+                                                        clients.find(
+                                                          (c) =>
+                                                            c.id ===
+                                                            appointment.client_id
+                                                        )?.phone
+                                                      }
+                                                    </span>
                                                   )}
                                                 </div>
-                                              </div>
+                                              )}
+
+                                              {/* Show service details if height allows */}
+                                              {heightInSlots >= 75 && (
+                                                <div className="flex items-center gap-2 mt-1 text-[10px]">
+                                                  {services.find(
+                                                    (s) =>
+                                                      s.id ===
+                                                      appointment.service_id.toString()
+                                                  )?.duration && (
+                                                    <span className="opacity-80">
+                                                      Duração:{" "}
+                                                      {
+                                                        services.find(
+                                                          (s) =>
+                                                            s.id ===
+                                                            appointment.service_id.toString()
+                                                        )?.duration
+                                                      }
+                                                      min
+                                                    </span>
+                                                  )}
+                                                  {services.find(
+                                                    (s) =>
+                                                      s.id ===
+                                                      appointment.service_id.toString()
+                                                  )?.price && (
+                                                    <span className="opacity-80">
+                                                      R${" "}
+                                                      {services
+                                                        .find(
+                                                          (s) =>
+                                                            s.id ===
+                                                            appointment.service_id.toString()
+                                                        )
+                                                        ?.price.toFixed(2)}
+                                                    </span>
+                                                  )}
+                                                </div>
+                                              )}
                                             </div>
-                                          );
-                                        }
+                                          </div>
+                                        </div>
                                       );
-                                    })()}
-                                    {timeSlotAppointments.length === 0 && (
-                                      <div className="absolute inset-0 flex cursor-pointer items-center justify-center opacity-0 transition-opacity group-hover:opacity-100">
-                                        <Plus className="h-4 w-4" />
-                                      </div>
-                                    )}
+                                    }
+                                  );
+                                })()}
+                                {timeSlotAppointments.length === 0 && (
+                                  <div className="absolute inset-0 flex cursor-pointer items-center justify-center opacity-0 transition-opacity group-hover:opacity-100">
+                                    <Plus className="h-4 w-4" />
                                   </div>
-                                </div>
-                              );
-                            })
-                        ) : (
-                          <div className="h-full flex items-center justify-center text-gray-500 text-sm border-b">
-                            Fechado
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  ))}
                 </div>
               </>
             )}
