@@ -11,6 +11,7 @@ import {
   addMonths,
   getDay,
   isSameMonth,
+  startOfDay,
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
@@ -596,10 +597,18 @@ export function CalendarView() {
   // Check if a slot is unavailable for the selected professional(s)
   const isSlotUnavailable = useCallback(
     (date: Date, professionalId: string | null) => {
-      // If there are appointments for this slot, don't mark as unavailable
+      // Check if the date is in the past
+      const isPastDate = date < startOfDay(new Date());
+
+      // If there are appointments for this slot, don't mark as unavailable even if it's past
       const existingAppointments = getTimeSlotAppointments(date);
       if (existingAppointments.length > 0) {
         return false;
+      }
+
+      // Mark past dates without appointments as unavailable
+      if (isPastDate) {
+        return true;
       }
 
       const formattedDate = format(date, "yyyy-MM-dd");
@@ -1084,7 +1093,7 @@ export function CalendarView() {
                                     currentHour,
                                     selectedProfessional
                                   ) && (
-                                    <div className="absolute inset-0 flex items-center justify-center bg-gray-200/80 text-gray-600 text-xs font-medium z-30">
+                                    <div className="absolute inset-0 flex items-center justify-center bg-gray-200/30 text-black/20 text-xs font-medium z-30">
                                       Horário indisponível
                                     </div>
                                   )}
