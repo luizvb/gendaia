@@ -203,9 +203,8 @@ export default function BookingPage() {
         return;
       }
 
-      // Ensure we're using the correct timezone
-      const spTimeZone = "America/Sao_Paulo";
-      const formattedDate = formatInTimeZone(date, spTimeZone, "yyyy-MM-dd");
+      // Format date in UTC for API calls without timezone conversion
+      const formattedDate = format(date, "yyyy-MM-dd");
 
       // Always fetch fresh data from the API with the correct service duration
       const response = await fetch(
@@ -217,7 +216,30 @@ export default function BookingPage() {
       }
 
       const data = await response.json();
-      setTimeSlots(data.available_slots);
+
+      // Convert UTC time slots to local time for display
+      const localTimeSlots = data.available_slots.map((utcTimeStr: string) => {
+        const [hours, minutes] = utcTimeStr.split(":").map(Number);
+
+        // Create a date with the UTC time
+        const utcDate = new Date(
+          Date.UTC(
+            date.getFullYear(),
+            date.getMonth(),
+            date.getDate(),
+            hours,
+            minutes
+          )
+        );
+
+        // Format in local time for display
+        return format(utcDate, "HH:mm");
+      });
+
+      // Sort by time
+      localTimeSlots.sort();
+
+      setTimeSlots(localTimeSlots);
     } catch (error) {
       console.error("Erro ao buscar horários disponíveis:", error);
       setError("Não foi possível carregar os horários disponíveis");
@@ -272,30 +294,28 @@ export default function BookingPage() {
       const selectedService = services.find((s) => s.id === service);
       const duration = selectedService?.duration || 30;
 
+      // Parse the selected time (which is in local time format)
       const [hours, minutes] = time.split(":").map(Number);
-      const spTimeZone = "America/Sao_Paulo";
 
-      // Create base date with the selected time - ensure we're using the correct timezone
-      // by creating a date in the browser's timezone first, then converting to the target timezone
-      const baseDate = new Date(date);
-      baseDate.setHours(hours, minutes, 0, 0);
+      // Convert local time to UTC
+      // Get the timezone offset in minutes
+      const tzOffset = new Date().getTimezoneOffset();
 
-      // Format dates in the correct timezone
-      const startTimeISO = formatInTimeZone(
-        baseDate,
-        spTimeZone,
-        "yyyy-MM-dd'T'HH:mm:ssXXX"
-      );
+      // Create a local date with the selected time
+      const localDate = new Date(date);
+      localDate.setHours(hours, minutes, 0, 0);
 
-      // Calculate end time by adding duration
-      const endTime = new Date(baseDate);
-      endTime.setMinutes(endTime.getMinutes() + duration);
+      // Convert to UTC by adding the timezone offset
+      // For Brazil (UTC-3), we need to add 3 hours to get UTC time
+      const startTime = new Date(localDate.getTime() - tzOffset * 60000);
 
-      const endTimeISO = formatInTimeZone(
-        endTime,
-        spTimeZone,
-        "yyyy-MM-dd'T'HH:mm:ssXXX"
-      );
+      // Format in ISO with Z suffix to ensure UTC
+      const startTimeISO = startTime.toISOString();
+
+      // Calculate end time by adding duration (in UTC)
+      const endTime = new Date(startTime);
+      endTime.setUTCMinutes(endTime.getUTCMinutes() + duration);
+      const endTimeISO = endTime.toISOString();
 
       // Enviar agendamento para a API
       const response = await fetch("/api/appointments", {

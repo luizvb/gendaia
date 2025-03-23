@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
-import { addDays, addHours, format, isSameDay, startOfWeek } from "date-fns";
+import { addDays, format, isSameDay, startOfWeek } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
   ChevronLeft,
@@ -10,7 +10,6 @@ import {
   ClipboardCopy,
   Menu,
 } from "lucide-react";
-import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { AppointmentModal } from "./appointment-modal";
@@ -101,6 +100,34 @@ export function CalendarView() {
 
   const calendarContainerRef = useRef<HTMLDivElement>(null);
 
+  // Helper function to convert local date to start of day in UTC
+  const startOfDay = useCallback((date: Date) => {
+    return new Date(
+      Date.UTC(date.getFullYear(), date.getMonth(), date.getDate())
+    );
+  }, []);
+
+  // Helper function to convert a local time slot to UTC for backend queries
+  const localToUTC = useCallback((localDate: Date) => {
+    // For UTC conversion, we need to create a UTC date with local time components
+    return new Date(
+      Date.UTC(
+        localDate.getFullYear(),
+        localDate.getMonth(),
+        localDate.getDate(),
+        localDate.getHours(),
+        localDate.getMinutes()
+      )
+    );
+  }, []);
+
+  // Helper function to convert UTC time to local time for display
+  const utcToLocal = useCallback((utcDateStr: string) => {
+    // Properly convert UTC date string to local date
+    const utcDate = new Date(utcDateStr);
+    return utcDate; // Browser automatically converts to local timezone
+  }, []);
+
   // Wrap fetch functions in useCallback to prevent recreation on every render
   const fetchProfessionals = useCallback(async () => {
     try {
@@ -155,16 +182,22 @@ export function CalendarView() {
 
   const fetchAppointments = useCallback(async () => {
     try {
+      // Format dates in UTC for API calls
       const startDate =
         view === "day"
-          ? format(currentDate, "yyyy-MM-dd")
-          : format(startOfWeek(currentDate, { locale: ptBR }), "yyyy-MM-dd");
+          ? format(startOfDay(currentDate), "yyyy-MM-dd")
+          : format(
+              startOfDay(startOfWeek(currentDate, { locale: ptBR })),
+              "yyyy-MM-dd"
+            );
 
       const endDate =
         view === "day"
-          ? format(addDays(currentDate, 1), "yyyy-MM-dd")
+          ? format(startOfDay(addDays(currentDate, 1)), "yyyy-MM-dd")
           : format(
-              addDays(startOfWeek(currentDate, { locale: ptBR }), 7),
+              startOfDay(
+                addDays(startOfWeek(currentDate, { locale: ptBR }), 7)
+              ),
               "yyyy-MM-dd"
             );
 
@@ -328,137 +361,17 @@ export function CalendarView() {
     [businessHours]
   );
 
-  // Function to get business hours for a specific day
-  const getBusinessHoursForDay = useCallback(
-    (date: Date) => {
-      const dayOfWeek = date.getDay();
+  // Fix for the appointment display in the calendar
+  const renderAppointmentTimes = (appointment: Appointment) => {
+    const start = new Date(appointment.start_time);
+    const end = new Date(appointment.end_time);
 
-      // If we don't have business hours for this day, use default hours
-      if (!businessHours[dayOfWeek]) {
-        return {
-          open_time: "09:00",
-          close_time: "19:00",
-        };
-      }
-
-      return {
-        open_time: businessHours[dayOfWeek].open_time || "09:00",
-        close_time: businessHours[dayOfWeek].close_time || "19:00",
-      };
-    },
-    [businessHours]
-  );
-
-  // Function to check if a specific time slot is within business hours
-  const isTimeSlotWithinBusinessHours = useCallback(
-    (date: Date) => {
-      const dayOfWeek = date.getDay();
-
-      // If the day is closed, the time slot is not within business hours
-      if (!isDayOpen(date)) return false;
-
-      // Get business hours for this day
-      const { open_time, close_time } = getBusinessHoursForDay(date);
-
-      // Parse open and close times
-      const [openHour, openMinute] = open_time.split(":").map(Number);
-      const [closeHour, closeMinute] = close_time.split(":").map(Number);
-
-      // Convert to minutes for easier comparison
-      const openTimeInMinutes = openHour * 60 + openMinute;
-      const closeTimeInMinutes = closeHour * 60 + closeMinute;
-      const slotTimeInMinutes = date.getHours() * 60 + date.getMinutes();
-
-      // Check if the time slot is within business hours
-      return (
-        slotTimeInMinutes >= openTimeInMinutes &&
-        slotTimeInMinutes < closeTimeInMinutes
-      );
-    },
-    [isDayOpen, getBusinessHoursForDay]
-  );
-
-  // Add this function after the isTimeSlotWithinBusinessHours function
-  const isSlotAvailable = useCallback(
-    (currentHour: Date, timeSlotAppointments: Appointment[]) => {
-      // Check if the slot is in the past
-      const now = new Date();
-      if (currentHour < now) return false;
-
-      // Check if there are any appointments in this slot
-      if (timeSlotAppointments.length > 0) return false;
-
-      // Check if it's within business hours by looking at the availability data
-      const formattedDate = format(currentHour, "yyyy-MM-dd");
-      const timeStr = format(currentHour, "HH:mm");
-
-      // If we have a selected professional, check availability for that professional
-      if (selectedProfessional) {
-        return (
-          professionalsAvailability[selectedProfessional]?.[
-            formattedDate
-          ]?.includes(timeStr) || false
-        );
-      }
-
-      // If no professional is selected, the slot is available if any professional has it available
-      return Object.keys(professionalsAvailability).some((profId) =>
-        professionalsAvailability[profId]?.[formattedDate]?.includes(timeStr)
-      );
-    },
-    [professionalsAvailability, selectedProfessional]
-  );
-
-  // Gerar os horários do dia com base nos horários de funcionamento
-  const dayHours = useMemo(() => {
-    const slots: Date[] = [];
-
-    // Default business hours if none are configured
-    const defaultOpenHour = 9; // Changed from 9 to 8
-    const defaultCloseHour = 18; // Changed from 19 to 18
-
-    // For each day in the view
-    daysToShow.forEach((day) => {
-      // Find the earliest open time and latest close time across all days
-      // to determine the full range of hours to display
-      let earliestOpenHour = 23;
-      let latestCloseHour = 0;
-
-      // Check all days to find the earliest and latest business hours
-      Object.values(businessHours).forEach((hours) => {
-        if (hours.is_open) {
-          const [openHour] = hours.open_time.split(":").map(Number);
-          const [closeHour] = hours.close_time.split(":").map(Number);
-
-          earliestOpenHour = Math.min(earliestOpenHour, openHour);
-          latestCloseHour = Math.max(latestCloseHour, closeHour);
-        }
-      });
-
-      // If no business hours are configured or all days are closed, use defaults
-      if (earliestOpenHour > latestCloseHour) {
-        earliestOpenHour = defaultOpenHour;
-        latestCloseHour = defaultCloseHour;
-      }
-
-      // Generate slots for the entire day based on the business hours range
-      for (let hour = earliestOpenHour; hour < latestCloseHour; hour++) {
-        for (let minute = 0; minute < 60; minute += 15) {
-          slots.push(
-            new Date(
-              day.getFullYear(),
-              day.getMonth(),
-              day.getDate(),
-              hour,
-              minute
-            )
-          );
-        }
-      }
-    });
-
-    return slots;
-  }, [daysToShow, businessHours]);
+    return (
+      <span className="text-[10px] opacity-75 whitespace-nowrap">
+        {format(start, "HH:mm")} - {format(end, "HH:mm")}
+      </span>
+    );
+  };
 
   // Determinar quantos dias mostrar com base na largura da tela (para mobile)
   const [visibleDays, setVisibleDays] = useState(daysToShow);
@@ -589,6 +502,7 @@ export function CalendarView() {
     setIsModalOpen(true);
   };
 
+  // Filter appointments based on selected professional
   const filteredAppointments = useMemo(() => {
     if (!selectedProfessional) return appointments;
     return appointments.filter(
@@ -596,20 +510,137 @@ export function CalendarView() {
     );
   }, [appointments, selectedProfessional]);
 
-  // Verificar se há agendamento para um horário e profissional específico
-  const getAppointment = useCallback(
-    (date: Date, professionalId: string) => {
-      return filteredAppointments.find((app) => {
-        const appDate = new Date(app.start_time);
+  // Check if a time slot has any appointments that overlap with it
+  const getTimeSlotAppointments = useCallback(
+    (currentHour: Date) => {
+      return filteredAppointments.filter((app) => {
+        // Convert appointment time to local time representation
+        const appStartTime = new Date(app.start_time);
+        const appEndTime = new Date(app.end_time);
+
+        // Um slot tem um agendamento se:
+        // 1. O slot começa no mesmo horário que o agendamento
+        // 2. O slot está dentro do período de um agendamento (excluindo exatamente o horário final)
         return (
-          isSameDay(appDate, date) &&
-          appDate.getHours() === date.getHours() &&
-          app.professional_id.toString() === professionalId
+          isSameDay(appStartTime, currentHour) &&
+          // É o início do agendamento
+          ((appStartTime.getHours() === currentHour.getHours() &&
+            appStartTime.getMinutes() === currentHour.getMinutes()) ||
+            // Está dentro do período do agendamento (mas não exatamente no final)
+            (appStartTime < currentHour && appEndTime > currentHour))
         );
       });
     },
     [filteredAppointments]
   );
+
+  // Modify the isSlotAvailable function to properly handle timezone conversions
+  const isSlotAvailable = useCallback(
+    (currentHour: Date, timeSlotAppointments: Appointment[]) => {
+      // Check if the slot is in the past
+      const now = new Date();
+      if (currentHour < now) return false;
+
+      // Check if there are any appointments starting exactly at this slot or overlapping it
+      if (timeSlotAppointments.length > 0) return false;
+
+      // Para debug - exibir horário do slot e hora UTC
+      // console.log(`Slot local: ${format(currentHour, "HH:mm")}`);
+
+      // Convert local time to UTC for API lookup
+      // Importante: devemos usar a mesma conversão que é usada no backend
+      const utcHour = new Date(
+        Date.UTC(
+          currentHour.getFullYear(),
+          currentHour.getMonth(),
+          currentHour.getDate(),
+          currentHour.getHours(),
+          currentHour.getMinutes()
+        )
+      );
+
+      // Format date in UTC
+      const formattedDate = format(utcHour, "yyyy-MM-dd");
+
+      // Format time in UTC format HH:MM - mesma convenção usada no backend
+      const timeStr = `${String(utcHour.getUTCHours()).padStart(
+        2,
+        "0"
+      )}:${String(utcHour.getUTCMinutes()).padStart(2, "0")}`;
+
+      // Para debug - exibir horário do slot em UTC após conversão
+      // console.log(`Slot UTC: ${timeStr}, data: ${formattedDate}`);
+
+      // If we have a selected professional, check availability for that professional
+      if (selectedProfessional) {
+        const availableSlots =
+          professionalsAvailability[selectedProfessional]?.[formattedDate] ||
+          [];
+        // Para debug - exibir slots disponíveis para este profissional nesta data
+        // console.log(`Slots disponíveis para ${selectedProfessional} em ${formattedDate}:`, availableSlots);
+
+        return availableSlots.includes(timeStr);
+      }
+
+      // If no professional is selected, the slot is available if any professional has it available
+      return Object.keys(professionalsAvailability).some((profId) => {
+        const availableSlots =
+          professionalsAvailability[profId]?.[formattedDate] || [];
+        return availableSlots.includes(timeStr);
+      });
+    },
+    [professionalsAvailability, selectedProfessional]
+  );
+
+  // Gerar os horários do dia com base nos horários de funcionamento
+  const dayHours = useMemo(() => {
+    const slots: Date[] = [];
+
+    // Default business hours if none are configured
+    const defaultOpenHour = 9;
+    const defaultCloseHour = 19;
+
+    // For each day in the view
+    daysToShow.forEach((day) => {
+      // Find the earliest open time and latest close time across all days
+      let earliestOpenHour = 23;
+      let latestCloseHour = 0;
+
+      // Check all days to find the earliest and latest business hours
+      Object.values(businessHours).forEach((hours) => {
+        if (hours.is_open) {
+          const [openHour] = hours.open_time.split(":").map(Number);
+          const [closeHour] = hours.close_time.split(":").map(Number);
+
+          earliestOpenHour = Math.min(earliestOpenHour, openHour);
+          latestCloseHour = Math.max(latestCloseHour, closeHour);
+        }
+      });
+
+      // If no business hours are configured or all days are closed, use defaults
+      if (earliestOpenHour > latestCloseHour) {
+        earliestOpenHour = defaultOpenHour;
+        latestCloseHour = defaultCloseHour;
+      }
+
+      // Generate slots for the entire day based on the business hours range
+      for (let hour = earliestOpenHour; hour < latestCloseHour; hour++) {
+        for (let minute = 0; minute < 60; minute += 15) {
+          slots.push(
+            new Date(
+              day.getFullYear(),
+              day.getMonth(),
+              day.getDate(),
+              hour,
+              minute
+            )
+          );
+        }
+      }
+    });
+
+    return slots;
+  }, [daysToShow, businessHours]);
 
   // Obter o profissional pelo ID
   const getProfessional = (id: number | string) => {
@@ -932,16 +963,7 @@ export function CalendarView() {
 
                               // Get all appointments for this time slot
                               const timeSlotAppointments =
-                                filteredAppointments.filter((app) => {
-                                  const appDate = new Date(app.start_time);
-                                  return (
-                                    isSameDay(appDate, currentHour) &&
-                                    appDate.getHours() ===
-                                      currentHour.getHours() &&
-                                    appDate.getMinutes() ===
-                                      currentHour.getMinutes()
-                                  );
-                                });
+                                getTimeSlotAppointments(currentHour);
 
                               // Update the calendar grid section (find the dayHours.map part)
                               const isAvailable = isSlotAvailable(
@@ -952,21 +974,16 @@ export function CalendarView() {
                               return (
                                 <div
                                   key={hourIndex}
-                                  className={`group relative h-12 border-b border-dashed border-border ${
-                                    !isAvailable
-                                      ? "bg-gray-100 cursor-not-allowed"
-                                      : "cursor-pointer"
-                                  }`}
+                                  className="group relative h-12 border-b border-dashed border-border cursor-pointer"
                                   onClick={() => {
-                                    if (isAvailable) {
-                                      openAppointmentModal(
-                                        currentHour,
-                                        selectedProfessional ||
-                                          professionals[0]?.id
-                                      );
-                                    }
+                                    openAppointmentModal(
+                                      currentHour,
+                                      selectedProfessional ||
+                                        professionals[0]?.id
+                                    );
                                   }}
                                 >
+                                  {/* Remover o debug de tempo para produção */}
                                   <div className="absolute inset-0 flex flex-col gap-1 p-1">
                                     {timeSlotAppointments.map((appointment) => {
                                       const professional = getProfessional(
@@ -988,7 +1005,7 @@ export function CalendarView() {
                                       const heightInSlots =
                                         (durationInMinutes / 15) * 48;
 
-                                      // Skip rendering if this isn't the start time slot
+                                      // Only render the appointment at its start time slot
                                       if (
                                         startTime.getHours() !==
                                           currentHour.getHours() ||
@@ -1025,39 +1042,23 @@ export function CalendarView() {
                                                 {appointment.clients.name}
                                               </span>
                                               <span className="truncate opacity-75">
-                                                {appointment.services.name} -{" "}
-                                                {format(startTime, "HH:mm")}
+                                                {appointment.services.name}
                                               </span>
                                             </div>
-                                            {heightInSlots >= 32 && (
-                                              <>
-                                                <span className="text-[10px] opacity-75 whitespace-nowrap">
-                                                  {format(startTime, "HH:mm")} -{" "}
-                                                  {format(endTime, "HH:mm")}
-                                                </span>
-                                              </>
+                                            {heightInSlots >= 24 && (
+                                              <span className="text-[10px] opacity-75 whitespace-nowrap">
+                                                {renderAppointmentTimes(
+                                                  appointment
+                                                )}
+                                              </span>
                                             )}
-                                            {heightInSlots < 32 &&
-                                              heightInSlots >= 24 && (
-                                                <span className="text-[10px] opacity-75 whitespace-nowrap">
-                                                  {format(startTime, "HH:mm")} -{" "}
-                                                  {format(endTime, "HH:mm")}
-                                                </span>
-                                              )}
                                           </div>
                                         </div>
                                       );
                                     })}
                                     {timeSlotAppointments.length === 0 && (
                                       <div className="absolute inset-0 flex cursor-pointer items-center justify-center opacity-0 transition-opacity group-hover:opacity-100">
-                                        {isAvailable && (
-                                          <Plus className="h-4 w-4" />
-                                        )}
-                                        {!isAvailable && (
-                                          <span className="text-xs text-gray-400">
-                                            Indisponível
-                                          </span>
-                                        )}
+                                        <Plus className="h-4 w-4" />
                                       </div>
                                     )}
                                   </div>

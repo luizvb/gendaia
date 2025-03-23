@@ -1,22 +1,6 @@
 import { NextResponse, NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import {
-  addDays,
-  addMinutes,
-  format,
-  parse,
-  setHours,
-  setMinutes,
-} from "date-fns";
-import {
-  DEFAULT_TIMEZONE,
-  createTzDate,
-  formatTzDate,
-  nowInTimeZone,
-  parseDateTimeInTz,
-  toTimeZone,
-  getTzDebugInfo,
-} from "@/lib/timezone";
+import { DEFAULT_TIMEZONE } from "@/lib/timezone";
 import { getBusinessId } from "@/lib/business-id";
 
 // Mark this route as dynamic to avoid static generation errors
@@ -24,21 +8,6 @@ export const dynamic = "force-dynamic";
 
 // Use timezone from utility
 const TIMEZONE = DEFAULT_TIMEZONE;
-
-// Debug mode setting - set to true to enable detailed logging
-const DEBUG_MODE = true;
-
-// Helper logging function
-const debugLog = (message: string, data: any) => {
-  if (DEBUG_MODE) {
-    console.log(`DEBUG: ${message}`, JSON.stringify(data, null, 2));
-  }
-};
-
-// Always log function for critical information - will show in production and development
-const alwaysLog = (message: string, data: any) => {
-  console.log(`CRITICAL LOG: ${message}`, JSON.stringify(data, null, 2));
-};
 
 interface Appointment {
   start_time: string;
@@ -70,37 +39,6 @@ export async function GET(request: NextRequest) {
     const serviceDuration = parseInt(
       searchParams.get("service_duration") || "30"
     );
-
-    // Log request parameters
-    debugLog("Request parameters", {
-      professionalId,
-      date,
-      startDate,
-      endDate,
-      serviceDuration,
-      timezone: TIMEZONE,
-      serverTime: new Date().toISOString(),
-      serverTimeInBrazil: formatTzDate(
-        nowInTimeZone(),
-        "yyyy-MM-dd'T'HH:mm:ssXXX"
-      ),
-    });
-
-    // Always log critical timezone information
-    alwaysLog("Timezone check", {
-      timezone: TIMEZONE,
-      serverTime: new Date().toISOString(),
-      serverTimeInBrazil: formatTzDate(
-        nowInTimeZone(),
-        "yyyy-MM-dd'T'HH:mm:ssXXX"
-      ),
-      requestParams: {
-        professionalId,
-        date,
-        startDate,
-        endDate,
-      },
-    });
 
     const fetchAll = searchParams.get("fetch_all") === "true";
     const daysAhead = parseInt(searchParams.get("days_ahead") || "15");
@@ -164,71 +102,68 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      // Initial and final date for calculation
+      // Initial and final date for calculation in UTC
       let startDateTime, endDateTime;
 
       // Use provided date range if available, otherwise use days ahead
       if (startDate && endDate) {
-        // Parse dates as local dates in the specified timezone
-        startDateTime = createTzDate(startDate, "yyyy-MM-dd");
-        endDateTime = createTzDate(endDate, "yyyy-MM-dd");
+        // Parse dates in UTC - no timezone conversion needed for date-only values
+        startDateTime = new Date(`${startDate}T00:00:00Z`);
+        endDateTime = new Date(`${endDate}T00:00:00Z`);
       } else {
-        // Use days ahead from today in the specified timezone
-        const today = nowInTimeZone();
-        startDateTime = today;
-        endDateTime = addDays(today, daysAhead - 1);
+        // Use days ahead from today in UTC
+        const today = new Date();
+        startDateTime = new Date(
+          Date.UTC(
+            today.getUTCFullYear(),
+            today.getUTCMonth(),
+            today.getUTCDate()
+          )
+        );
+        endDateTime = new Date(startDateTime);
+        endDateTime.setUTCDate(endDateTime.getUTCDate() + daysAhead - 1);
       }
 
-      // Log calculated date range and always log key date information
-      debugLog("Date range", {
-        startDateTime: startDateTime.toISOString(),
-        endDateTime: endDateTime.toISOString(),
-        startDateTimeFormatted: formatTzDate(
-          startDateTime,
-          "yyyy-MM-dd'T'HH:mm:ssXXX"
-        ),
-        endDateTimeFormatted: formatTzDate(
-          endDateTime,
-          "yyyy-MM-dd'T'HH:mm:ssXXX"
-        ),
-      });
-
-      alwaysLog("Date range calculation result", {
-        startDate: startDate,
-        endDate: endDate,
-        daysAhead: daysAhead,
-        calculatedStartDate: formatTzDate(startDateTime, "yyyy-MM-dd"),
-        calculatedEndDate: formatTzDate(endDateTime, "yyyy-MM-dd"),
-      });
-
-      // Generate dates for the specified interval
+      // Generate dates for the specified interval using UTC
       const dates: string[] = [];
-      let currentDate = startDateTime;
+      let currentDate = new Date(startDateTime);
       while (currentDate <= endDateTime) {
-        // Convert to local date in the specified timezone for formatting
-        dates.push(formatTzDate(currentDate, "yyyy-MM-dd"));
-        currentDate = addDays(currentDate, 1);
+        // Format dates in YYYY-MM-DD format using UTC
+        dates.push(
+          `${currentDate.getUTCFullYear()}-${String(
+            currentDate.getUTCMonth() + 1
+          ).padStart(2, "0")}-${String(currentDate.getUTCDate()).padStart(
+            2,
+            "0"
+          )}`
+        );
+        currentDate.setUTCDate(currentDate.getUTCDate() + 1);
       }
 
-      // Fetch all appointments for the interval
-      const formattedStartDate = formatTzDate(startDateTime, "yyyy-MM-dd");
-      const formattedEndDate = formatTzDate(
-        addDays(endDateTime, 1),
-        "yyyy-MM-dd"
-      );
+      // Fetch all appointments for the interval using UTC date boundaries
+      const formattedStartDate = `${startDateTime.getUTCFullYear()}-${String(
+        startDateTime.getUTCMonth() + 1
+      ).padStart(2, "0")}-${String(startDateTime.getUTCDate()).padStart(
+        2,
+        "0"
+      )}`;
 
-      debugLog("Formatted date range for query", {
-        formattedStartDate,
-        formattedEndDate,
-        queryStart: `${formattedStartDate}T00:00:00`,
-        queryEnd: `${formattedEndDate}T00:00:00`,
-      });
+      // Add one day to the end date for the query to include the full end day
+      const endDateTimeInclusiveEnd = new Date(endDateTime);
+      endDateTimeInclusiveEnd.setUTCDate(
+        endDateTimeInclusiveEnd.getUTCDate() + 1
+      );
+      const formattedEndDate = `${endDateTimeInclusiveEnd.getUTCFullYear()}-${String(
+        endDateTimeInclusiveEnd.getUTCMonth() + 1
+      ).padStart(2, "0")}-${String(
+        endDateTimeInclusiveEnd.getUTCDate()
+      ).padStart(2, "0")}`;
 
       let appointmentsQuery = supabase
         .from("appointments")
         .select("start_time, end_time, professional_id")
-        .gte("start_time", `${formattedStartDate}T00:00:00`)
-        .lt("start_time", `${formattedEndDate}T00:00:00`);
+        .gte("start_time", `${formattedStartDate}T00:00:00Z`)
+        .lt("start_time", `${formattedEndDate}T00:00:00Z`);
 
       // Add business_id filter if provided
       if (businessId) {
@@ -253,7 +188,7 @@ export async function GET(request: NextRequest) {
 
           // For each date, calculate available slots
           dates.forEach((dateStr) => {
-            // Filter this professional's appointments for this date
+            // Filter this professional's appointments for this date (in UTC)
             const professionalAppointments = allAppointments.filter(
               (app: Appointment) =>
                 app.professional_id === professional.id &&
@@ -277,46 +212,19 @@ export async function GET(request: NextRequest) {
           };
         });
 
-      // For specific debugging cases, add detailed logs for a professional
-      if (professionals.length > 0) {
-        const firstProfessional = professionals[0];
-        if (dates.length > 0) {
-          const firstDate = dates[0];
-          const professionalAppointments = allAppointments.filter(
-            (app: Appointment) =>
-              app.professional_id === firstProfessional.id &&
-              app.start_time.startsWith(firstDate)
-          );
-
-          debugLog(
-            `Debug availability calculation for professional ${firstProfessional.id} on ${firstDate}`,
-            {
-              professionalId: firstProfessional.id,
-              date: firstDate,
-              appointments: professionalAppointments,
-              businessHours: hours.find(
-                (h) =>
-                  h.day_of_week ===
-                  createTzDate(firstDate, "yyyy-MM-dd").getDay()
-              ),
-            }
-          );
-        }
-      }
-
       return NextResponse.json({
         professionals_availability: professionalAvailability,
       });
     }
     // Otherwise, maintain original behavior for a specific professional
     else if (professionalId && date) {
-      // Fetch existing appointments for the professional on that day
+      // Fetch existing appointments for the professional on that day using UTC date boundaries
       let query = supabase
         .from("appointments")
         .select("start_time, end_time")
         .eq("professional_id", professionalId)
-        .gte("start_time", `${date}T00:00:00`)
-        .lt("start_time", `${date}T23:59:59`);
+        .gte("start_time", `${date}T00:00:00Z`)
+        .lt("start_time", `${date}T23:59:59Z`);
 
       // Add business_id filter if provided
       if (businessId) {
@@ -365,173 +273,116 @@ function calculateAvailableSlots(
   serviceDuration: number,
   businessHours: BusinessHours[]
 ): string[] {
-  // Convert date string to Date object in the specific timezone using our utility
-  const currentDate = createTzDate(dateStr, "yyyy-MM-dd");
+  // Work with UTC for all calculations
+  const currentDate = new Date(`${dateStr}T00:00:00Z`);
 
-  // Log critical information about the date
-  alwaysLog(`Calculating availability for date ${dateStr}`, {
-    inputDateStr: dateStr,
-    currentDateISO: currentDate.toISOString(),
-    currentDateFormatted: formatTzDate(currentDate, "yyyy-MM-dd"),
-    currentDateWithTZ: formatTzDate(currentDate, "yyyy-MM-dd'T'HH:mm:ssXXX"),
-    dayOfWeek: currentDate.getDay(),
-  });
-
-  // Log the date being processed
-  debugLog(`Calculating slots for ${dateStr}`, {
-    currentDateInTimezone: formatTzDate(
-      currentDate,
-      "yyyy-MM-dd'T'HH:mm:ssXXX"
-    ),
-    dayOfWeek: currentDate.getDay(),
-  });
-
-  // Get the day of week (0 = Sunday, 1 = Monday, etc.)
-  const dayOfWeek = currentDate.getDay();
+  // Get the day of week based on UTC date
+  const dayOfWeek = currentDate.getUTCDay();
 
   // Get business hours for this day
   const dayHours = businessHours.find((h) => h.day_of_week === dayOfWeek);
 
   // If business is closed on this day or hours not found, return empty array
   if (!dayHours || !dayHours.is_open) {
-    debugLog(`Business closed on ${dateStr}`, { dayOfWeek, dayHours });
     return [];
   }
 
-  // Parse business hours - make sure to create date objects in the target timezone
+  // Parse business hours - these are stored in local time (e.g. "09:00")
+  // but need to be treated as UTC hours for consistent calculations
   const [openHour, openMinute] = dayHours.open_time.split(":").map(Number);
   const [closeHour, closeMinute] = dayHours.close_time.split(":").map(Number);
 
-  // Construct full date strings with the business hours and parse them
-  const openTimeStr = `${formatTzDate(currentDate, "yyyy-MM-dd")} ${
-    dayHours.open_time
-  }`;
-  const closeTimeStr = `${formatTzDate(currentDate, "yyyy-MM-dd")} ${
-    dayHours.close_time
-  }`;
+  // Create UTC Date objects representing the business hours in UTC
+  // We're treating the local hours as if they were UTC hours
+  const dayStart = new Date(
+    Date.UTC(
+      currentDate.getUTCFullYear(),
+      currentDate.getUTCMonth(),
+      currentDate.getUTCDate(),
+      openHour,
+      openMinute
+    )
+  );
 
-  // Parse the full date strings and convert to the target timezone using our utility
-  const dayStart = parseDateTimeInTz(openTimeStr, "yyyy-MM-dd HH:mm");
-  const dayEnd = parseDateTimeInTz(closeTimeStr, "yyyy-MM-dd HH:mm");
-
-  // Log business hours
-  alwaysLog(`Business hours for ${dateStr}`, {
-    openTimeRaw: dayHours.open_time,
-    closeTimeRaw: dayHours.close_time,
-    openTimeStr,
-    closeTimeStr,
-    dayStartISO: dayStart.toISOString(),
-    dayEndISO: dayEnd.toISOString(),
-    dayStartFormatted: formatTzDate(dayStart, "yyyy-MM-dd'T'HH:mm:ssXXX"),
-    dayEndFormatted: formatTzDate(dayEnd, "yyyy-MM-dd'T'HH:mm:ssXXX"),
-    appointmentsCount: appointments.length,
-  });
+  const dayEnd = new Date(
+    Date.UTC(
+      currentDate.getUTCFullYear(),
+      currentDate.getUTCMonth(),
+      currentDate.getUTCDate(),
+      closeHour,
+      closeMinute
+    )
+  );
 
   // Initialize array of available slots
   const availableSlots: string[] = [];
-  let currentSlot = dayStart;
+  let currentSlot = new Date(dayStart);
 
-  // Convert all appointment times to our timezone explicitly using our utility
-  const zonedAppointments = appointments.map((appointment) => {
-    const startTime = toTimeZone(new Date(appointment.start_time));
-    const endTime = toTimeZone(new Date(appointment.end_time));
+  // Parse appointment times correctly as UTC Date objects
+  const parsedAppointments = appointments.map((appointment) => {
     return {
-      start_time: startTime,
-      end_time: endTime,
+      start_time: new Date(appointment.start_time),
+      end_time: new Date(appointment.end_time),
       professional_id: appointment.professional_id,
-      raw_start: appointment.start_time,
-      raw_end: appointment.end_time,
-      startISO: startTime.toISOString(),
-      endISO: endTime.toISOString(),
     };
   });
 
   // Function to check if a time conflicts with existing appointments
   const hasConflict = (start: Date, end: Date) => {
-    for (const appointment of zonedAppointments) {
+    return parsedAppointments.some((appointment) => {
       const appointmentStart = appointment.start_time;
       const appointmentEnd = appointment.end_time;
 
-      // Check for overlap between intervals
-      if (
-        (start < appointmentEnd && end > appointmentStart) ||
-        // Also check specific cases of exact start/end
+      // Check for exact start time match or actual overlap
+      // A slot conflicts if:
+      // 1. It starts exactly when another appointment starts
+      // 2. It overlaps with an existing appointment (standard overlap check)
+      return (
         start.getTime() === appointmentStart.getTime() ||
-        end.getTime() === appointmentEnd.getTime() ||
-        // Check if slot is completely within an appointment
-        (start >= appointmentStart && end <= appointmentEnd) ||
-        // Check if appointment is completely within slot
-        (appointmentStart >= start && appointmentEnd <= end)
-      ) {
-        return true;
-      }
-    }
-    return false;
+        (start < appointmentEnd && appointmentStart < end)
+      );
+    });
   };
 
-  // Function to check if a slot is in the past - using server-local now with timezone
+  // Function to check if a slot is in the past
   const isPast = (date: Date) => {
-    // Make sure to use the same timezone for both dates using our utility
-    const now = nowInTimeZone();
+    const now = new Date();
     return date < now;
   };
 
-  // Count slots processed for debugging
-  let processedSlots = 0;
-  let availableCount = 0;
-  let pastCount = 0;
-  let conflictCount = 0;
-  let outOfRangeCount = 0;
-
   // Generate available slots every 15 minutes
   while (currentSlot < dayEnd) {
-    processedSlots++;
-    // For each 15-minute slot, we check if a service with the given duration would fit
-    const serviceEnd = addMinutes(currentSlot, serviceDuration);
+    // Calculate end time for service
+    const serviceEnd = new Date(currentSlot);
+    serviceEnd.setUTCMinutes(serviceEnd.getUTCMinutes() + serviceDuration);
 
-    // Skip out of range slots
+    // Skip if service would end after business hours
     if (serviceEnd > dayEnd) {
-      outOfRangeCount++;
-      currentSlot = addMinutes(currentSlot, 15);
+      currentSlot.setUTCMinutes(currentSlot.getUTCMinutes() + 15);
       continue;
     }
 
-    // Check conflicts
-    const hasTimeConflict = hasConflict(currentSlot, serviceEnd);
-    if (hasTimeConflict) {
-      conflictCount++;
-      currentSlot = addMinutes(currentSlot, 15);
+    // Skip if there's a conflict with an existing appointment
+    if (hasConflict(currentSlot, serviceEnd)) {
+      currentSlot.setUTCMinutes(currentSlot.getUTCMinutes() + 15);
       continue;
     }
 
-    // Check if in past
-    const isInPast = isPast(currentSlot);
-    if (isInPast) {
-      pastCount++;
-      currentSlot = addMinutes(currentSlot, 15);
+    // Skip if the slot is in the past
+    if (isPast(currentSlot)) {
+      currentSlot.setUTCMinutes(currentSlot.getUTCMinutes() + 15);
       continue;
     }
 
-    // If we get here, the slot is available
-    availableCount++;
-    // Always use formatTzDate to ensure consistent format in all environments
-    availableSlots.push(formatTzDate(currentSlot, "HH:mm"));
+    // Se chegamos aqui, o slot está disponível - formato como HH:MM em UTC
+    // IMPORTANTE: Este formato deve corresponder exatamente ao formato usado no frontend
+    const hours = String(currentSlot.getUTCHours()).padStart(2, "0");
+    const minutes = String(currentSlot.getUTCMinutes()).padStart(2, "0");
+    availableSlots.push(`${hours}:${minutes}`);
 
     // Move to next 15-minute slot
-    currentSlot = addMinutes(currentSlot, 15);
+    currentSlot.setUTCMinutes(currentSlot.getUTCMinutes() + 15);
   }
-
-  // Log availability results
-  alwaysLog(`Final availability for ${dateStr}`, {
-    totalProcessed: processedSlots,
-    availableCount,
-    pastCount,
-    conflictCount,
-    outOfRangeCount,
-    availableSlots,
-    dateProcessed: dateStr,
-    dayOfWeek: dayOfWeek,
-  });
 
   return availableSlots;
 }
