@@ -195,6 +195,20 @@ export default function ProfessionalsPage() {
               </CardTitle>
               <CardDescription>{professional.specialty}</CardDescription>
             </CardHeader>
+            <CardContent className="space-y-2 text-sm text-muted-foreground">
+              {professional.email && (
+                <div className="flex items-center gap-2">
+                  <span className="font-medium">Email:</span>{" "}
+                  {professional.email}
+                </div>
+              )}
+              {professional.whatsapp && (
+                <div className="flex items-center gap-2">
+                  <span className="font-medium">WhatsApp:</span>{" "}
+                  {professional.whatsapp}
+                </div>
+              )}
+            </CardContent>
             <CardFooter className="flex justify-end gap-2">
               <Button
                 variant="outline"
