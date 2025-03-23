@@ -95,14 +95,16 @@ export default function BookingPage() {
     const savedPhone = localStorage.getItem(PHONE_STORAGE_KEY);
     if (savedPhone) {
       setPhone(formatPhoneNumber(savedPhone));
-      if (activeTab === "view") {
+      if (activeTab === "view" && business?.id) {
         fetchAppointments(normalizePhoneNumber(savedPhone));
       }
     }
-  }, [activeTab]);
+  }, [activeTab, business]);
 
   // Fetch all availability data
   const fetchAllAvailability = async () => {
+    if (!business?.id) return;
+
     try {
       const response = await fetch("/api/availability?fetch_all=true", {
         headers: createHeaders(),
@@ -128,45 +130,14 @@ export default function BookingPage() {
     }
   };
 
-  // Carregar serviços e profissionais
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        // Buscar serviços
-        const servicesResponse = await fetch("/api/services", {
-          headers: createHeaders(),
-        });
-        const servicesData = await servicesResponse.json();
-        setServices(servicesData);
-
-        // Buscar profissionais
-        const professionalsResponse = await fetch("/api/professionals", {
-          headers: createHeaders(),
-        });
-        const professionalsData = await professionalsResponse.json();
-        setProfessionals(professionalsData);
-
-        // Fetch all availability
-        await fetchAllAvailability();
-      } catch (error) {
-        console.error("Erro ao carregar dados:", error);
-        setError(
-          "Não foi possível carregar os dados. Tente novamente mais tarde."
-        );
-      }
-    };
-
-    fetchData();
-  }, []);
-
   // Gerar horários disponíveis
   useEffect(() => {
-    if (professional && date && service) {
+    if (professional && date && service && business?.id) {
       generateTimeSlots();
     } else {
       setTimeSlots([]);
     }
-  }, [date, professional, service]);
+  }, [date, professional, service, business]);
 
   useEffect(() => {
     const fetchBusinessData = async () => {
@@ -201,6 +172,15 @@ export default function BookingPage() {
 
         // Now fetch other data needed for booking using the business ID
         await fetchData(businessData.id);
+
+        // After business data and initial data are loaded, fetch availability
+        await fetchAllAvailability();
+
+        // Check if we need to load appointments
+        const savedPhone = localStorage.getItem(PHONE_STORAGE_KEY);
+        if (savedPhone && activeTab === "view") {
+          fetchAppointments(normalizePhoneNumber(savedPhone));
+        }
       } catch (err) {
         console.error("Error fetching business:", err);
         setError(err instanceof Error ? err.message : "Unknown error");
