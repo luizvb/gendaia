@@ -135,7 +135,7 @@ export default function BookingPage() {
 
         // Fetch business data by hostname
         const response = await fetch(
-          `/api/businesses/by-subdomain?hostname=${encodeURIComponent(
+          `/api/businesses/by-subdomain?subdomain=${encodeURIComponent(
             queryParam
           )}`
         );
