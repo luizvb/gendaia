@@ -11,12 +11,15 @@ export const GET = async (request: NextRequest) => {
     const { searchParams } = new URL(request.url);
     const phone = searchParams.get("phone");
     const businessIdFromQuery = searchParams.get("business_id");
+    const headerBusinessId = request.headers.get("X-Business-ID");
 
     let businessId: string | null = null;
 
-    // If business_id is provided in query, use it directly
+    // If business_id is provided in query or header, use it directly
     if (businessIdFromQuery) {
       businessId = businessIdFromQuery;
+    } else if (headerBusinessId) {
+      businessId = headerBusinessId;
     } else {
       // Otherwise check auth and get business_id from session
       const {
@@ -96,11 +99,16 @@ export async function POST(request: NextRequest) {
 
     // Parse request body first
     const body = await request.json();
+    const headerBusinessId = request.headers.get("X-Business-ID");
 
-    // If business_id is provided in body, use it directly
+    // If business_id is provided in body or header, use it directly
     let businessId = body.business_id;
 
-    // Only check authentication if business_id is not provided in body
+    if (!businessId && headerBusinessId) {
+      businessId = headerBusinessId;
+    }
+
+    // Only check authentication if business_id is not provided in body or header
     if (!businessId) {
       const {
         data: { session },

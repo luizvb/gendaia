@@ -7,12 +7,20 @@ export async function GET(
 ) {
   try {
     const supabase = await createClient();
+    const headerBusinessId = request.headers.get("X-Business-ID");
 
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    let businessId;
+
+    if (headerBusinessId) {
+      businessId = headerBusinessId;
+    } else {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      businessId = session.user.id;
     }
 
     const id = params.id;
@@ -28,7 +36,7 @@ export async function GET(
       `
       )
       .eq("id", id)
-      .eq("business_id", session.user.id)
+      .eq("business_id", businessId)
       .single();
 
     if (error) {
@@ -57,12 +65,20 @@ export async function PUT(
 ) {
   try {
     const supabase = await createClient();
+    const headerBusinessId = request.headers.get("X-Business-ID");
 
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    let businessId;
+
+    if (headerBusinessId) {
+      businessId = headerBusinessId;
+    } else {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      businessId = session.user.id;
     }
 
     const id = params.id;
@@ -81,7 +97,7 @@ export async function PUT(
         updated_at: new Date().toISOString(),
       })
       .eq("id", id)
-      .eq("business_id", session.user.id)
+      .eq("business_id", businessId)
       .select();
 
     if (error) {
@@ -111,12 +127,20 @@ export async function DELETE(
 ) {
   try {
     const supabase = await createClient();
+    const headerBusinessId = request.headers.get("X-Business-ID");
 
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    let businessId;
+
+    if (headerBusinessId) {
+      businessId = headerBusinessId;
+    } else {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      businessId = session.user.id;
     }
 
     const id = params.id;
@@ -126,7 +150,7 @@ export async function DELETE(
       .from("appointments")
       .select("start_time")
       .eq("id", id)
-      .eq("business_id", session.user.id)
+      .eq("business_id", businessId)
       .single();
 
     if (fetchError) {
@@ -155,7 +179,7 @@ export async function DELETE(
       .from("appointments")
       .delete()
       .eq("id", id)
-      .eq("business_id", session.user.id);
+      .eq("business_id", businessId);
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
