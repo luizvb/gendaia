@@ -96,6 +96,8 @@ export async function POST(request: NextRequest) {
           color: body.color || null,
           business_id: businessId,
           specialty: body.specialty || null,
+          email: body.email || null,
+          whatsapp: body.whatsapp || null,
         },
       ])
       .select();
@@ -152,6 +154,8 @@ export async function PUT(request: NextRequest) {
     if (body.name) updateData.name = body.name;
     if (body.color !== undefined) updateData.color = body.color;
     if (body.specialty !== undefined) updateData.specialty = body.specialty;
+    if (body.email !== undefined) updateData.email = body.email;
+    if (body.whatsapp !== undefined) updateData.whatsapp = body.whatsapp;
 
     // Update professional
     const { error } = await supabase

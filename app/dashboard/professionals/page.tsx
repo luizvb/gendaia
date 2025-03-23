@@ -25,12 +25,15 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { formatPhoneNumber } from "@/lib/utils";
 
 interface Professional {
   id: number;
   name: string;
   specialty: string;
   color: string;
+  email?: string;
+  whatsapp?: string;
 }
 
 export default function ProfessionalsPage() {
@@ -42,6 +45,8 @@ export default function ProfessionalsPage() {
     name: "",
     specialty: "",
     color: "#3b82f6",
+    email: "",
+    whatsapp: "+55 ",
   });
   const [isLoading, setIsLoading] = useState(false);
 
@@ -67,6 +72,8 @@ export default function ProfessionalsPage() {
       name: "",
       specialty: "",
       color: "#3b82f6",
+      email: "",
+      whatsapp: "+55 ",
     });
     setIsModalOpen(true);
   };
@@ -77,16 +84,28 @@ export default function ProfessionalsPage() {
       name: professional.name,
       specialty: professional.specialty,
       color: professional.color,
+      email: professional.email || "",
+      whatsapp: professional.whatsapp
+        ? formatPhoneNumber(professional.whatsapp)
+        : "+55 ",
     });
     setIsModalOpen(true);
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
+
+    if (name === "whatsapp") {
+      setFormData((prev) => ({
+        ...prev,
+        [name]: formatPhoneNumber(value),
+      }));
+    } else {
+      setFormData((prev) => ({
+        ...prev,
+        [name]: value,
+      }));
+    }
   };
 
   const handleSubmit = async () => {
@@ -96,6 +115,8 @@ export default function ProfessionalsPage() {
         name: formData.name,
         specialty: formData.specialty,
         color: formData.color,
+        email: formData.email,
+        whatsapp: formData.whatsapp,
       };
 
       const url = editingProfessional
@@ -226,6 +247,27 @@ export default function ProfessionalsPage() {
                 name="specialty"
                 value={formData.specialty}
                 onChange={handleInputChange}
+              />
+            </div>
+            <div>
+              <Label htmlFor="email">E-mail para cadastro</Label>
+              <Input
+                id="email"
+                name="email"
+                type="email"
+                value={formData.email}
+                onChange={handleInputChange}
+                placeholder="email@exemplo.com"
+              />
+            </div>
+            <div>
+              <Label htmlFor="whatsapp">Celular WhatsApp</Label>
+              <Input
+                id="whatsapp"
+                name="whatsapp"
+                value={formData.whatsapp}
+                onChange={handleInputChange}
+                placeholder="+55 (11) 99999-9999"
               />
             </div>
             <div>
