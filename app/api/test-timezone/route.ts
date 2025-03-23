@@ -1,6 +1,6 @@
 import { NextResponse, NextRequest } from "next/server";
-import { formatInTimeZone, toZonedTime } from "date-fns-tz";
-import { addDays, parse } from "date-fns";
+import { formatInTimeZone } from "date-fns-tz";
+import { addDays } from "date-fns";
 
 // Set timezone for Brazil
 const TIMEZONE = "America/Sao_Paulo";
@@ -9,56 +9,58 @@ export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
   const testDate = searchParams.get("date") || "2025-03-24";
 
-  // Parse date consistently by explicitly converting to UTC first, then to Brazil timezone
-  const utcDate = parse(testDate, "yyyy-MM-dd", new Date());
-  // Force the date to be interpreted as midnight in Brazil timezone
-  const dateObj = toZonedTime(
-    new Date(
-      `${testDate}T00:00:00.000${formatInTimeZone(
-        new Date(),
-        TIMEZONE,
-        "xxx" // Get current timezone offset
-      )}`
-    ),
-    TIMEZONE
-  );
+  // Create a specific date string in ISO format with the target timezone offset
+  // This is the key change - we explicitly construct a date that includes timezone info
+  const offset = formatInTimeZone(new Date(), TIMEZONE, "xxx");
+  const startISOString = `${testDate}T00:00:00.000${offset}`;
+
+  // Create Date object from the ISO string
+  const dateObj = new Date(startISOString);
 
   // Generate data for the next 3 days
   const days = [];
   for (let i = 0; i < 3; i++) {
     const currentDate = addDays(dateObj, i);
-    // Ensure consistent time zone handling
-    const zonedDate = toZonedTime(currentDate, TIMEZONE);
-    const formattedDate = formatInTimeZone(zonedDate, TIMEZONE, "yyyy-MM-dd");
+    const formattedDate = formatInTimeZone(currentDate, TIMEZONE, "yyyy-MM-dd");
+
+    // Create time strings directly with timezone info
+    const openTimeStr = `${formattedDate}T09:00:00${offset}`;
+    const closeTimeStr = `${formattedDate}T19:00:00${offset}`;
+
+    // Get day of week in target timezone
+    const dayOfWeek = Number(formatInTimeZone(currentDate, TIMEZONE, "e")) % 7; // 0-6, Sunday-Saturday
 
     days.push({
+      dateInfo: {
+        isoWithOffset: startISOString,
+        rawDate: dateObj.toString(),
+        currentTimeString: formatInTimeZone(
+          new Date(),
+          TIMEZONE,
+          "yyyy-MM-dd'T'HH:mm:ssXXX"
+        ),
+        offset: offset,
+      },
       dateISO: currentDate.toISOString(),
       dateLocal: currentDate.toString(),
-      dateZoned: zonedDate.toString(),
-      formattedRegular: formattedDate,
-      dayOfWeek: zonedDate.getDay(),
+      formattedDateInTZ: formattedDate,
+      localDayOfWeek: dayOfWeek,
       businessHours: {
         open: formatInTimeZone(
-          toZonedTime(
-            parse(`${formattedDate} 09:00`, "yyyy-MM-dd HH:mm", new Date()),
-            TIMEZONE
-          ),
+          new Date(openTimeStr),
           TIMEZONE,
           "yyyy-MM-dd'T'HH:mm:ssXXX"
         ),
         close: formatInTimeZone(
-          toZonedTime(
-            parse(`${formattedDate} 19:00`, "yyyy-MM-dd HH:mm", new Date()),
-            TIMEZONE
-          ),
+          new Date(closeTimeStr),
           TIMEZONE,
           "yyyy-MM-dd'T'HH:mm:ssXXX"
         ),
       },
       timestamps: {
-        unix: zonedDate.getTime(),
+        unix: currentDate.getTime(),
         now: new Date().getTime(),
-        isPast: zonedDate.getTime() < new Date().getTime(),
+        isPast: currentDate.getTime() < new Date().getTime(),
       },
     });
   }

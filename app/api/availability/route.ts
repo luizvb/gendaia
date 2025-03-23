@@ -163,32 +163,40 @@ export async function GET(request: NextRequest) {
 
       // Use provided date range if available, otherwise use days ahead
       if (startDate && endDate) {
+        // Get timezone offset once
+        const offset = formatInTimeZone(new Date(), TIMEZONE, "xxx");
+
         // Create dates with explicit timezone information
-        startDateTime = new Date(
-          `${startDate}T00:00:00.000${formatInTimeZone(
-            new Date(),
-            TIMEZONE,
-            "xxx"
-          )}`
-        );
-        endDateTime = new Date(
-          `${endDate}T00:00:00.000${formatInTimeZone(
-            new Date(),
-            TIMEZONE,
-            "xxx"
-          )}`
-        );
+        startDateTime = new Date(`${startDate}T00:00:00.000${offset}`);
+        endDateTime = new Date(`${endDate}T00:00:00.000${offset}`);
+
+        alwaysLog("Using provided date range", {
+          startDateInput: startDate,
+          endDateInput: endDate,
+          offset,
+          parsedStartDate: startDateTime.toISOString(),
+          parsedEndDate: endDateTime.toISOString(),
+        });
       } else {
         // Use days ahead from today in the specified timezone
-        const nowWithTz = new Date(
-          `${formatInTimeZone(
-            new Date(),
-            TIMEZONE,
-            "yyyy-MM-dd"
-          )}T00:00:00.000${formatInTimeZone(new Date(), TIMEZONE, "xxx")}`
+        const offset = formatInTimeZone(new Date(), TIMEZONE, "xxx");
+        const todayFormatted = formatInTimeZone(
+          new Date(),
+          TIMEZONE,
+          "yyyy-MM-dd"
         );
+        const nowWithTz = new Date(`${todayFormatted}T00:00:00.000${offset}`);
+
         startDateTime = nowWithTz;
         endDateTime = addDays(nowWithTz, daysAhead - 1);
+
+        alwaysLog("Using days ahead", {
+          daysAhead,
+          offset,
+          todayFormatted,
+          parsedStartDate: startDateTime.toISOString(),
+          parsedEndDate: endDateTime.toISOString(),
+        });
       }
 
       // Log calculated date range and always log key date information
@@ -395,21 +403,17 @@ function calculateAvailableSlots(
   serviceDuration: number,
   businessHours: BusinessHours[]
 ): string[] {
-  // Convert date string to Date object in the specific timezone
-  // First create a date at midnight in the target timezone
-  const dateWithTz = new Date(
-    `${dateStr}T00:00:00.000${formatInTimeZone(
-      new Date(),
-      TIMEZONE,
-      "xxx" // Get current timezone offset
-    )}`
-  );
-  const currentDate = toZonedTime(dateWithTz, TIMEZONE);
+  // Get the timezone offset once to use consistently
+  const offset = formatInTimeZone(new Date(), TIMEZONE, "xxx");
+
+  // Create a date string with explicit timezone info
+  const dateWithTzString = `${dateStr}T00:00:00.000${offset}`;
+  const currentDate = new Date(dateWithTzString);
 
   // Log critical information about the date
   alwaysLog(`Calculating availability for date ${dateStr}`, {
     inputDateStr: dateStr,
-    dateWithTzISO: dateWithTz.toISOString(),
+    dateWithTzString: dateWithTzString,
     currentDateISO: currentDate.toISOString(),
     currentDateFormatted: formatInTimeZone(currentDate, TIMEZONE, "yyyy-MM-dd"),
     currentDateWithTZ: formatInTimeZone(
@@ -417,22 +421,11 @@ function calculateAvailableSlots(
       TIMEZONE,
       "yyyy-MM-dd'T'HH:mm:ssXXX"
     ),
-    dayOfWeek: currentDate.getDay(),
+    offset: offset,
   });
 
-  // Log the date being processed
-  debugLog(`Calculating slots for ${dateStr}`, {
-    dateWithTz: dateWithTz.toISOString(),
-    currentDateInTimezone: formatInTimeZone(
-      currentDate,
-      TIMEZONE,
-      "yyyy-MM-dd'T'HH:mm:ssXXX"
-    ),
-    dayOfWeek: currentDate.getDay(),
-  });
-
-  // Get the day of week (0 = Sunday, 1 = Monday, etc.)
-  const dayOfWeek = currentDate.getDay();
+  // Get the day of week in the target timezone (0 = Sunday, 1 = Monday, etc.)
+  const dayOfWeek = Number(formatInTimeZone(currentDate, TIMEZONE, "e")) % 7;
 
   // Get business hours for this day
   const dayHours = businessHours.find((h) => h.day_of_week === dayOfWeek);
@@ -446,16 +439,11 @@ function calculateAvailableSlots(
   // Parse business hours - make sure to create date objects in the target timezone
   const formattedDate = formatInTimeZone(currentDate, TIMEZONE, "yyyy-MM-dd");
 
-  // Construct business hours dates using the formatted date and explicit timezone
-  const openTimeStr = `${formattedDate}T${
-    dayHours.open_time
-  }:00${formatInTimeZone(new Date(), TIMEZONE, "xxx")}`;
+  // Construct business hours dates using the formatted date and explicit timezone offset
+  const openTimeStr = `${formattedDate}T${dayHours.open_time}:00${offset}`;
+  const closeTimeStr = `${formattedDate}T${dayHours.close_time}:00${offset}`;
 
-  const closeTimeStr = `${formattedDate}T${
-    dayHours.close_time
-  }:00${formatInTimeZone(new Date(), TIMEZONE, "xxx")}`;
-
-  // Parse the time strings with explicit timezone info
+  // Create Date objects from ISO strings with timezone
   const dayStart = new Date(openTimeStr);
   const dayEnd = new Date(closeTimeStr);
 
@@ -494,8 +482,6 @@ function calculateAvailableSlots(
       professional_id: appointment.professional_id,
       raw_start: appointment.start_time,
       raw_end: appointment.end_time,
-      startISO: startTime.toISOString(),
-      endISO: endTime.toISOString(),
     };
   });
 
@@ -522,16 +508,13 @@ function calculateAvailableSlots(
     return false;
   };
 
-  // Function to check if a slot is in the past - using server-local now with timezone
+  // Function to check if a slot is in the past
   const isPast = (date: Date) => {
-    // Create a now date that has the correct timezone information
-    const nowWithTz = new Date(
-      `${formatInTimeZone(
-        new Date(),
-        TIMEZONE,
-        "yyyy-MM-dd'T'HH:mm:ss"
-      )}${formatInTimeZone(new Date(), TIMEZONE, "xxx")}`
-    );
+    // Create a now date with explicit timezone info
+    const nowStr =
+      formatInTimeZone(new Date(), TIMEZONE, "yyyy-MM-dd'T'HH:mm:ss") + offset;
+
+    const nowWithTz = new Date(nowStr);
     return date < nowWithTz;
   };
 
