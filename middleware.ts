@@ -142,7 +142,7 @@ export async function middleware(request: NextRequest) {
       !request.nextUrl.pathname.startsWith("/booking")
     ) {
       const url = request.nextUrl.clone();
-      url.pathname = "/dashboard";
+      url.pathname = "/dashboard/calendar";
       return NextResponse.redirect(url);
     }
   }

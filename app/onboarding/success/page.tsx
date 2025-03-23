@@ -69,7 +69,10 @@ export default function SuccessPage() {
           </div>
         </CardContent>
         <CardFooter className="flex justify-center">
-          <Button onClick={() => router.push("/dashboard")} className="px-8">
+          <Button
+            onClick={() => router.push("/dashboard/calendar")}
+            className="px-8"
+          >
             Ir para o Dashboard
           </Button>
         </CardFooter>

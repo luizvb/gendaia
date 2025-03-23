@@ -247,7 +247,10 @@ export default function DashboardLayout({
               </SheetTrigger>
               <SheetContent side="left" className="w-[240px] p-0">
                 <div className="flex h-16 items-center border-b px-4">
-                  <Link href="/dashboard" className="flex items-center gap-2">
+                  <Link
+                    href="/dashboard/calendar"
+                    className="flex items-center gap-2"
+                  >
                     {businessInfo?.logo ? (
                       <div className="h-8 w-8 relative">
                         <Image

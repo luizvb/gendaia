@@ -19,8 +19,8 @@ import { Button } from "@/components/ui/button";
 import Image from "next/image";
 
 export const navigation = [
-  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Agenda", href: "/dashboard/calendar", icon: Calendar },
+  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Clientes", href: "/dashboard/clients", icon: Users },
   { name: "Serviços", href: "/dashboard/services", icon: Scissors },
   { name: "Profissionais", href: "/dashboard/professionals", icon: Users },
@@ -95,7 +95,7 @@ export function Sidebar({ className }: SidebarProps) {
             </Link>
           ) : businessInfo?.logo ? (
             <Link
-              href="/dashboard"
+              href="/dashboard/calendar"
               className="flex items-center justify-center"
             >
               <div className="h-8 w-8 relative">
@@ -109,7 +109,7 @@ export function Sidebar({ className }: SidebarProps) {
             </Link>
           ) : (
             <Link
-              href="/dashboard"
+              href="/dashboard/calendar"
               className="flex items-center justify-center"
             >
               <span className="text-xl font-semibold tracking-tight">G</span>
