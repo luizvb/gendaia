@@ -34,10 +34,13 @@ export async function GET(request: Request) {
 
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
-      return NextResponse.redirect(`${origin}/dashboard/calendar`);
+      const redirectUrl = new URL("/dashboard/calendar", origin);
+      return NextResponse.redirect(redirectUrl);
     }
   }
 
   // Return the user to an error page with instructions
-  return NextResponse.redirect(`${origin}/login?error=auth`);
+  const errorUrl = new URL("/login", origin);
+  errorUrl.searchParams.set("error", "auth");
+  return NextResponse.redirect(errorUrl);
 }

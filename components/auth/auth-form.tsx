@@ -44,7 +44,7 @@ export function AuthForm({ view }: { view: "sign-in" | "sign-up" }) {
       if (error) {
         setError(error.message);
       } else {
-        router.push("/dashboard");
+        router.push("/dashboard/calendar");
         router.refresh();
       }
     } catch (error) {
@@ -60,7 +60,7 @@ export function AuthForm({ view }: { view: "sign-in" | "sign-up" }) {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
+          redirectTo: `${window.location.origin}/auth/callback`, // This will redirect to /dashboard/calendar after auth
         },
       });
 
