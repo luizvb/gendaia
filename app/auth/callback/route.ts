@@ -34,6 +34,9 @@ export async function GET(request: Request) {
 
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
+      // Add a small delay to ensure cookies are properly set
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+
       const redirectUrl = new URL("/dashboard/calendar", origin);
       return NextResponse.redirect(redirectUrl);
     }
