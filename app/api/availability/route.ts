@@ -8,14 +8,22 @@ import {
   setHours,
   setMinutes,
 } from "date-fns";
-import { toZonedTime, formatInTimeZone } from "date-fns-tz";
+import {
+  DEFAULT_TIMEZONE,
+  createTzDate,
+  formatTzDate,
+  nowInTimeZone,
+  parseDateTimeInTz,
+  toTimeZone,
+  getTzDebugInfo,
+} from "@/lib/timezone";
 import { getBusinessId } from "@/lib/business-id";
 
 // Mark this route as dynamic to avoid static generation errors
 export const dynamic = "force-dynamic";
 
-// Set timezone for Brazil
-const TIMEZONE = "America/Sao_Paulo";
+// Use timezone from utility
+const TIMEZONE = DEFAULT_TIMEZONE;
 
 // Debug mode setting - set to true to enable detailed logging
 const DEBUG_MODE = true;
@@ -72,9 +80,8 @@ export async function GET(request: NextRequest) {
       serviceDuration,
       timezone: TIMEZONE,
       serverTime: new Date().toISOString(),
-      serverTimeInBrazil: formatInTimeZone(
-        new Date(),
-        TIMEZONE,
+      serverTimeInBrazil: formatTzDate(
+        nowInTimeZone(),
         "yyyy-MM-dd'T'HH:mm:ssXXX"
       ),
     });
@@ -83,9 +90,8 @@ export async function GET(request: NextRequest) {
     alwaysLog("Timezone check", {
       timezone: TIMEZONE,
       serverTime: new Date().toISOString(),
-      serverTimeInBrazil: formatInTimeZone(
-        new Date(),
-        TIMEZONE,
+      serverTimeInBrazil: formatTzDate(
+        nowInTimeZone(),
         "yyyy-MM-dd'T'HH:mm:ssXXX"
       ),
       requestParams: {
@@ -163,54 +169,26 @@ export async function GET(request: NextRequest) {
 
       // Use provided date range if available, otherwise use days ahead
       if (startDate && endDate) {
-        // Get timezone offset once
-        const offset = formatInTimeZone(new Date(), TIMEZONE, "xxx");
-
-        // Create dates with explicit timezone information
-        startDateTime = new Date(`${startDate}T00:00:00.000${offset}`);
-        endDateTime = new Date(`${endDate}T00:00:00.000${offset}`);
-
-        alwaysLog("Using provided date range", {
-          startDateInput: startDate,
-          endDateInput: endDate,
-          offset,
-          parsedStartDate: startDateTime.toISOString(),
-          parsedEndDate: endDateTime.toISOString(),
-        });
+        // Parse dates as local dates in the specified timezone
+        startDateTime = createTzDate(startDate, "yyyy-MM-dd");
+        endDateTime = createTzDate(endDate, "yyyy-MM-dd");
       } else {
         // Use days ahead from today in the specified timezone
-        const offset = formatInTimeZone(new Date(), TIMEZONE, "xxx");
-        const todayFormatted = formatInTimeZone(
-          new Date(),
-          TIMEZONE,
-          "yyyy-MM-dd"
-        );
-        const nowWithTz = new Date(`${todayFormatted}T00:00:00.000${offset}`);
-
-        startDateTime = nowWithTz;
-        endDateTime = addDays(nowWithTz, daysAhead - 1);
-
-        alwaysLog("Using days ahead", {
-          daysAhead,
-          offset,
-          todayFormatted,
-          parsedStartDate: startDateTime.toISOString(),
-          parsedEndDate: endDateTime.toISOString(),
-        });
+        const today = nowInTimeZone();
+        startDateTime = today;
+        endDateTime = addDays(today, daysAhead - 1);
       }
 
       // Log calculated date range and always log key date information
       debugLog("Date range", {
         startDateTime: startDateTime.toISOString(),
         endDateTime: endDateTime.toISOString(),
-        startDateTimeFormatted: formatInTimeZone(
+        startDateTimeFormatted: formatTzDate(
           startDateTime,
-          TIMEZONE,
           "yyyy-MM-dd'T'HH:mm:ssXXX"
         ),
-        endDateTimeFormatted: formatInTimeZone(
+        endDateTimeFormatted: formatTzDate(
           endDateTime,
-          TIMEZONE,
           "yyyy-MM-dd'T'HH:mm:ssXXX"
         ),
       });
@@ -219,16 +197,8 @@ export async function GET(request: NextRequest) {
         startDate: startDate,
         endDate: endDate,
         daysAhead: daysAhead,
-        calculatedStartDate: formatInTimeZone(
-          startDateTime,
-          TIMEZONE,
-          "yyyy-MM-dd"
-        ),
-        calculatedEndDate: formatInTimeZone(
-          endDateTime,
-          TIMEZONE,
-          "yyyy-MM-dd"
-        ),
+        calculatedStartDate: formatTzDate(startDateTime, "yyyy-MM-dd"),
+        calculatedEndDate: formatTzDate(endDateTime, "yyyy-MM-dd"),
       });
 
       // Generate dates for the specified interval
@@ -236,19 +206,14 @@ export async function GET(request: NextRequest) {
       let currentDate = startDateTime;
       while (currentDate <= endDateTime) {
         // Convert to local date in the specified timezone for formatting
-        dates.push(formatInTimeZone(currentDate, TIMEZONE, "yyyy-MM-dd"));
+        dates.push(formatTzDate(currentDate, "yyyy-MM-dd"));
         currentDate = addDays(currentDate, 1);
       }
 
       // Fetch all appointments for the interval
-      const formattedStartDate = formatInTimeZone(
-        startDateTime,
-        TIMEZONE,
-        "yyyy-MM-dd"
-      );
-      const formattedEndDate = formatInTimeZone(
+      const formattedStartDate = formatTzDate(startDateTime, "yyyy-MM-dd");
+      const formattedEndDate = formatTzDate(
         addDays(endDateTime, 1),
-        TIMEZONE,
         "yyyy-MM-dd"
       );
 
@@ -332,10 +297,7 @@ export async function GET(request: NextRequest) {
               businessHours: hours.find(
                 (h) =>
                   h.day_of_week ===
-                  toZonedTime(
-                    parse(firstDate, "yyyy-MM-dd", new Date()),
-                    TIMEZONE
-                  ).getDay()
+                  createTzDate(firstDate, "yyyy-MM-dd").getDay()
               ),
             }
           );
@@ -403,29 +365,29 @@ function calculateAvailableSlots(
   serviceDuration: number,
   businessHours: BusinessHours[]
 ): string[] {
-  // Get the timezone offset once to use consistently
-  const offset = formatInTimeZone(new Date(), TIMEZONE, "xxx");
-
-  // Create a date string with explicit timezone info
-  const dateWithTzString = `${dateStr}T00:00:00.000${offset}`;
-  const currentDate = new Date(dateWithTzString);
+  // Convert date string to Date object in the specific timezone using our utility
+  const currentDate = createTzDate(dateStr, "yyyy-MM-dd");
 
   // Log critical information about the date
   alwaysLog(`Calculating availability for date ${dateStr}`, {
     inputDateStr: dateStr,
-    dateWithTzString: dateWithTzString,
     currentDateISO: currentDate.toISOString(),
-    currentDateFormatted: formatInTimeZone(currentDate, TIMEZONE, "yyyy-MM-dd"),
-    currentDateWithTZ: formatInTimeZone(
-      currentDate,
-      TIMEZONE,
-      "yyyy-MM-dd'T'HH:mm:ssXXX"
-    ),
-    offset: offset,
+    currentDateFormatted: formatTzDate(currentDate, "yyyy-MM-dd"),
+    currentDateWithTZ: formatTzDate(currentDate, "yyyy-MM-dd'T'HH:mm:ssXXX"),
+    dayOfWeek: currentDate.getDay(),
   });
 
-  // Get the day of week in the target timezone (0 = Sunday, 1 = Monday, etc.)
-  const dayOfWeek = Number(formatInTimeZone(currentDate, TIMEZONE, "e")) % 7;
+  // Log the date being processed
+  debugLog(`Calculating slots for ${dateStr}`, {
+    currentDateInTimezone: formatTzDate(
+      currentDate,
+      "yyyy-MM-dd'T'HH:mm:ssXXX"
+    ),
+    dayOfWeek: currentDate.getDay(),
+  });
+
+  // Get the day of week (0 = Sunday, 1 = Monday, etc.)
+  const dayOfWeek = currentDate.getDay();
 
   // Get business hours for this day
   const dayHours = businessHours.find((h) => h.day_of_week === dayOfWeek);
@@ -437,15 +399,20 @@ function calculateAvailableSlots(
   }
 
   // Parse business hours - make sure to create date objects in the target timezone
-  const formattedDate = formatInTimeZone(currentDate, TIMEZONE, "yyyy-MM-dd");
+  const [openHour, openMinute] = dayHours.open_time.split(":").map(Number);
+  const [closeHour, closeMinute] = dayHours.close_time.split(":").map(Number);
 
-  // Construct business hours dates using the formatted date and explicit timezone offset
-  const openTimeStr = `${formattedDate}T${dayHours.open_time}:00${offset}`;
-  const closeTimeStr = `${formattedDate}T${dayHours.close_time}:00${offset}`;
+  // Construct full date strings with the business hours and parse them
+  const openTimeStr = `${formatTzDate(currentDate, "yyyy-MM-dd")} ${
+    dayHours.open_time
+  }`;
+  const closeTimeStr = `${formatTzDate(currentDate, "yyyy-MM-dd")} ${
+    dayHours.close_time
+  }`;
 
-  // Create Date objects from ISO strings with timezone
-  const dayStart = new Date(openTimeStr);
-  const dayEnd = new Date(closeTimeStr);
+  // Parse the full date strings and convert to the target timezone using our utility
+  const dayStart = parseDateTimeInTz(openTimeStr, "yyyy-MM-dd HH:mm");
+  const dayEnd = parseDateTimeInTz(closeTimeStr, "yyyy-MM-dd HH:mm");
 
   // Log business hours
   alwaysLog(`Business hours for ${dateStr}`, {
@@ -455,16 +422,8 @@ function calculateAvailableSlots(
     closeTimeStr,
     dayStartISO: dayStart.toISOString(),
     dayEndISO: dayEnd.toISOString(),
-    dayStartFormatted: formatInTimeZone(
-      dayStart,
-      TIMEZONE,
-      "yyyy-MM-dd'T'HH:mm:ssXXX"
-    ),
-    dayEndFormatted: formatInTimeZone(
-      dayEnd,
-      TIMEZONE,
-      "yyyy-MM-dd'T'HH:mm:ssXXX"
-    ),
+    dayStartFormatted: formatTzDate(dayStart, "yyyy-MM-dd'T'HH:mm:ssXXX"),
+    dayEndFormatted: formatTzDate(dayEnd, "yyyy-MM-dd'T'HH:mm:ssXXX"),
     appointmentsCount: appointments.length,
   });
 
@@ -472,16 +431,18 @@ function calculateAvailableSlots(
   const availableSlots: string[] = [];
   let currentSlot = dayStart;
 
-  // Convert all appointment times to our timezone explicitly
+  // Convert all appointment times to our timezone explicitly using our utility
   const zonedAppointments = appointments.map((appointment) => {
-    const startTime = new Date(appointment.start_time);
-    const endTime = new Date(appointment.end_time);
+    const startTime = toTimeZone(new Date(appointment.start_time));
+    const endTime = toTimeZone(new Date(appointment.end_time));
     return {
       start_time: startTime,
       end_time: endTime,
       professional_id: appointment.professional_id,
       raw_start: appointment.start_time,
       raw_end: appointment.end_time,
+      startISO: startTime.toISOString(),
+      endISO: endTime.toISOString(),
     };
   });
 
@@ -508,14 +469,11 @@ function calculateAvailableSlots(
     return false;
   };
 
-  // Function to check if a slot is in the past
+  // Function to check if a slot is in the past - using server-local now with timezone
   const isPast = (date: Date) => {
-    // Create a now date with explicit timezone info
-    const nowStr =
-      formatInTimeZone(new Date(), TIMEZONE, "yyyy-MM-dd'T'HH:mm:ss") + offset;
-
-    const nowWithTz = new Date(nowStr);
-    return date < nowWithTz;
+    // Make sure to use the same timezone for both dates using our utility
+    const now = nowInTimeZone();
+    return date < now;
   };
 
   // Count slots processed for debugging
@@ -556,8 +514,8 @@ function calculateAvailableSlots(
 
     // If we get here, the slot is available
     availableCount++;
-    // Format the time consistently to ensure it works in all environments
-    availableSlots.push(formatInTimeZone(currentSlot, TIMEZONE, "HH:mm"));
+    // Always use formatTzDate to ensure consistent format in all environments
+    availableSlots.push(formatTzDate(currentSlot, "HH:mm"));
 
     // Move to next 15-minute slot
     currentSlot = addMinutes(currentSlot, 15);
