@@ -899,77 +899,204 @@ export function CalendarView() {
                                 >
                                   {/* Remover o debug de tempo para produção */}
                                   <div className="absolute inset-0 flex flex-col gap-1 p-1">
-                                    {timeSlotAppointments.map((appointment) => {
-                                      const professional = getProfessional(
-                                        appointment.professional_id
-                                      );
-                                      const startTime = new Date(
-                                        appointment.start_time
-                                      );
-                                      const endTime = new Date(
-                                        appointment.end_time
-                                      );
-                                      const durationInMinutes =
-                                        (endTime.getTime() -
-                                          startTime.getTime()) /
-                                        (1000 * 60);
+                                    {(() => {
+                                      // Group appointments by professional to handle overlaps
+                                      const appointmentsByProfessional =
+                                        timeSlotAppointments.reduce(
+                                          (acc, appointment) => {
+                                            const profId =
+                                              appointment.professional_id.toString();
+                                            if (!acc[profId]) acc[profId] = [];
+                                            acc[profId].push(appointment);
+                                            return acc;
+                                          },
+                                          {} as Record<string, Appointment[]>
+                                        );
 
-                                      // Fix the height calculation to account for 15-minute slots
-                                      // Each 15-minute slot is 48px tall (h-12 = 48px)
-                                      const heightInSlots =
-                                        (durationInMinutes / 15) * 48;
+                                      const professionalIds = Object.keys(
+                                        appointmentsByProfessional
+                                      );
+                                      const totalProfessionals =
+                                        professionalIds.length;
 
-                                      // Only render the appointment at its start time slot
-                                      if (
-                                        startTime.getHours() !==
-                                          currentHour.getHours() ||
-                                        startTime.getMinutes() !==
-                                          currentHour.getMinutes()
-                                      ) {
-                                        return null;
-                                      }
+                                      return timeSlotAppointments.map(
+                                        (appointment, index) => {
+                                          const professional = getProfessional(
+                                            appointment.professional_id
+                                          );
+                                          const startTime = new Date(
+                                            appointment.start_time
+                                          );
+                                          const endTime = new Date(
+                                            appointment.end_time
+                                          );
+                                          const durationInMinutes =
+                                            (endTime.getTime() -
+                                              startTime.getTime()) /
+                                            (1000 * 60);
 
-                                      return (
-                                        <div
-                                          key={appointment.id}
-                                          className="absolute left-0 right-0 flex flex-col rounded-md p-1 text-xs text-white cursor-pointer hover:brightness-90 transition-all overflow-hidden"
-                                          style={{
-                                            backgroundColor:
-                                              professional?.color || "#3b82f6",
-                                            height: `${heightInSlots}px`,
-                                            zIndex: 10,
-                                            top: 0,
-                                            minHeight: "24px",
-                                          }}
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            openAppointmentModal(
-                                              currentHour,
-                                              professional?.id || "",
-                                              appointment
+                                          // Calculate height based on duration
+                                          const heightInSlots =
+                                            (durationInMinutes / 15) * 48;
+
+                                          // Only render the appointment at its start time slot
+                                          if (
+                                            startTime.getHours() !==
+                                              currentHour.getHours() ||
+                                            startTime.getMinutes() !==
+                                              currentHour.getMinutes()
+                                          ) {
+                                            return null;
+                                          }
+
+                                          // Calculate position for side-by-side display
+                                          const profIndex =
+                                            professionalIds.findIndex(
+                                              (id) =>
+                                                id ===
+                                                appointment.professional_id.toString()
                                             );
-                                          }}
-                                        >
-                                          <div className="flex flex-col gap-0.5 min-h-0 h-full">
-                                            <div className="flex items-center gap-1 min-w-0">
-                                              <span className="font-medium truncate">
-                                                {appointment.clients.name}
-                                              </span>
-                                              <span className="truncate opacity-75">
-                                                {appointment.services.name}
-                                              </span>
-                                            </div>
-                                            {heightInSlots >= 24 && (
-                                              <span className="text-[10px] opacity-75 whitespace-nowrap">
-                                                {renderAppointmentTimes(
+                                          const width =
+                                            totalProfessionals > 1
+                                              ? `${100 / totalProfessionals}%`
+                                              : "100%";
+                                          const left =
+                                            totalProfessionals > 1
+                                              ? `${
+                                                  (profIndex * 100) /
+                                                  totalProfessionals
+                                                }%`
+                                              : "0";
+
+                                          return (
+                                            <div
+                                              key={appointment.id}
+                                              className="absolute flex flex-col rounded-md p-1 text-xs text-white cursor-pointer hover:brightness-90 transition-all overflow-hidden"
+                                              style={{
+                                                backgroundColor:
+                                                  professional?.color ||
+                                                  "#3b82f6",
+                                                height: `${heightInSlots}px`,
+                                                zIndex: 10,
+                                                top: 0,
+                                                minHeight: "24px",
+                                                width,
+                                                left,
+                                                right:
+                                                  totalProfessionals > 1
+                                                    ? "auto"
+                                                    : 0,
+                                              }}
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                openAppointmentModal(
+                                                  currentHour,
+                                                  professional?.id || "",
                                                   appointment
-                                                )}
-                                              </span>
-                                            )}
-                                          </div>
-                                        </div>
+                                                );
+                                              }}
+                                            >
+                                              <div className="flex flex-col justify-between min-h-0 h-full">
+                                                <div className="flex flex-col gap-0.5 min-w-0">
+                                                  <div className="flex items-center justify-between">
+                                                    <span className="font-medium truncate">
+                                                      {appointment.clients.name}
+                                                    </span>
+                                                    {renderAppointmentTimes(
+                                                      appointment
+                                                    )}
+                                                  </div>
+
+                                                  {/* Show service name if height allows */}
+                                                  {heightInSlots >= 30 && (
+                                                    <div className="flex items-center gap-1">
+                                                      <span className="truncate font-medium opacity-90">
+                                                        {
+                                                          appointment.services
+                                                            .name
+                                                        }
+                                                      </span>
+                                                    </div>
+                                                  )}
+
+                                                  {/* Show professional name if height allows */}
+                                                  {heightInSlots >= 45 &&
+                                                    professional && (
+                                                      <div className="flex items-center gap-1 mt-1 text-[10px]">
+                                                        <span className="opacity-80">
+                                                          Profissional:{" "}
+                                                          {professional.name}
+                                                        </span>
+                                                      </div>
+                                                    )}
+
+                                                  {/* Show client phone if we have it and height allows */}
+                                                  {heightInSlots >= 60 && (
+                                                    <div className="flex items-center gap-1 text-[10px]">
+                                                      {clients.find(
+                                                        (c) =>
+                                                          c.id ===
+                                                          appointment.client_id
+                                                      )?.phone && (
+                                                        <span className="opacity-80">
+                                                          Celular:{" "}
+                                                          {
+                                                            clients.find(
+                                                              (c) =>
+                                                                c.id ===
+                                                                appointment.client_id
+                                                            )?.phone
+                                                          }
+                                                        </span>
+                                                      )}
+                                                    </div>
+                                                  )}
+
+                                                  {/* Show service details if height allows */}
+                                                  {heightInSlots >= 75 && (
+                                                    <div className="flex items-center gap-2 mt-1 text-[10px]">
+                                                      {services.find(
+                                                        (s) =>
+                                                          s.id ===
+                                                          appointment.service_id.toString()
+                                                      )?.duration && (
+                                                        <span className="opacity-80">
+                                                          Duração:{" "}
+                                                          {
+                                                            services.find(
+                                                              (s) =>
+                                                                s.id ===
+                                                                appointment.service_id.toString()
+                                                            )?.duration
+                                                          }
+                                                          min
+                                                        </span>
+                                                      )}
+                                                      {services.find(
+                                                        (s) =>
+                                                          s.id ===
+                                                          appointment.service_id.toString()
+                                                      )?.price && (
+                                                        <span className="opacity-80">
+                                                          R${" "}
+                                                          {services
+                                                            .find(
+                                                              (s) =>
+                                                                s.id ===
+                                                                appointment.service_id.toString()
+                                                            )
+                                                            ?.price.toFixed(2)}
+                                                        </span>
+                                                      )}
+                                                    </div>
+                                                  )}
+                                                </div>
+                                              </div>
+                                            </div>
+                                          );
+                                        }
                                       );
-                                    })}
+                                    })()}
                                     {timeSlotAppointments.length === 0 && (
                                       <div className="absolute inset-0 flex cursor-pointer items-center justify-center opacity-0 transition-opacity group-hover:opacity-100">
                                         <Plus className="h-4 w-4" />

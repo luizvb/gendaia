@@ -148,7 +148,7 @@ export default function DashboardLayout({
   const pathname = usePathname();
   const supabase = createClient();
   const isMobile = useIsMobile();
-  const [isDrawerOpen, setIsDrawerOpen] = useState(!isMobile);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [profile, setProfile] = useState<{
     full_name: string;
     avatar_url: string | null;

@@ -213,6 +213,15 @@ export function AppointmentModal({
 
       const formattedDate = format(date, "yyyy-MM-dd");
 
+      // If we're in edit mode and modifying an existing appointment, always include the current time
+      let originalTimeSlot = "";
+      if (isEditMode && selectedAppointment) {
+        originalTimeSlot = format(
+          new Date(selectedAppointment.start_time),
+          "HH:mm"
+        );
+      }
+
       // Check if we have pre-fetched availability data
       if (
         professionalsAvailability &&
@@ -222,26 +231,25 @@ export function AppointmentModal({
         const availableSlots =
           professionalsAvailability[professionalId]?.[formattedDate] || [];
 
-        setTimeSlots(availableSlots);
+        // Always include the original time slot for existing appointments
+        const updatedSlots = [
+          ...new Set([
+            ...availableSlots,
+            ...(originalTimeSlot ? [originalTimeSlot] : []),
+          ]),
+        ].sort();
+        setTimeSlots(updatedSlots);
 
-        // If in edit mode, check if the current time is still available
-        if (isEditMode && time && !availableSlots.includes(time)) {
-          // Check if this is the current appointment's time in edit mode
-          if (selectedAppointment) {
-            const appointmentTime = format(
-              new Date(selectedAppointment.start_time),
-              "HH:mm"
-            );
-            if (appointmentTime === time) {
-              // This is the current appointment's time, so it's valid
-            } else {
-              setTime("");
-              toast.error("O horário selecionado não está mais disponível");
-            }
-          } else {
-            setTime("");
-            toast.error("O horário selecionado não está mais disponível");
-          }
+        // If in edit mode and the current time is the original appointment time,
+        // we should always keep it valid regardless of availability
+        if (
+          isEditMode &&
+          time &&
+          !availableSlots.includes(time) &&
+          time !== originalTimeSlot
+        ) {
+          // If this isn't the original appointment time and it's not available, clear it
+          setTime("");
         }
 
         setIsLoadingTimeSlots(false);
@@ -258,25 +266,25 @@ export function AppointmentModal({
       }
 
       const data = await response.json();
-      setTimeSlots(data.available_slots);
+
+      // Always include the original time slot for existing appointments
+      const updatedSlots = [
+        ...new Set([
+          ...data.available_slots,
+          ...(originalTimeSlot ? [originalTimeSlot] : []),
+        ]),
+      ].sort();
+      setTimeSlots(updatedSlots);
 
       // Check if the current time is still available in edit mode
-      if (isEditMode && time && !data.available_slots.includes(time)) {
-        if (selectedAppointment) {
-          const appointmentTime = format(
-            new Date(selectedAppointment.start_time),
-            "HH:mm"
-          );
-          if (appointmentTime === time) {
-            // This is the current appointment's time, so it's valid
-          } else {
-            setTime("");
-            toast.error("O horário selecionado não está mais disponível");
-          }
-        } else {
-          setTime("");
-          toast.error("O horário selecionado não está mais disponível");
-        }
+      if (
+        isEditMode &&
+        time &&
+        !data.available_slots.includes(time) &&
+        time !== originalTimeSlot
+      ) {
+        // If this isn't the original appointment time and it's not available, clear it
+        setTime("");
       }
     } catch (error) {
       console.error("Erro ao buscar horários disponíveis:", error);
@@ -410,8 +418,14 @@ export function AppointmentModal({
         const formattedDate = format(startTime, "yyyy-MM-dd");
         const timeStr = format(startTime, "HH:mm");
 
+        // In edit mode, if we're using the same time as the original appointment,
+        // we should always consider it available
+        const originalTimeSlot = selectedAppointment
+          ? format(new Date(selectedAppointment.start_time), "HH:mm")
+          : "";
+
         // Check if the time exists in our timeslots list
-        if (!timeSlots.includes(timeStr)) {
+        if (!timeSlots.includes(timeStr) && timeStr !== originalTimeSlot) {
           console.log("Horário não disponível");
           toast.error("Este horário não está mais disponível");
           return;
@@ -847,21 +861,25 @@ export function AppointmentModal({
             />
           </div>
         </div>
-        <DialogFooter className="flex justify-between">
-          {isEditMode && (
+        <DialogFooter className="flex sm:justify-between flex-col sm:flex-row gap-2 sm:gap-0">
+          <div>
+            {isEditMode && (
+              <Button
+                variant="destructive"
+                onClick={handleDelete}
+                disabled={isLoading || isDeleting}
+                className="w-full sm:w-auto"
+              >
+                {isDeleting ? "Excluindo..." : "Excluir"}
+              </Button>
+            )}
+          </div>
+          <div className="flex gap-2 sm:flex-row flex-col sm:flex-row-reverse">
             <Button
-              variant="destructive"
-              onClick={handleDelete}
+              onClick={handleSubmit}
               disabled={isLoading || isDeleting}
+              className="w-full sm:w-auto"
             >
-              {isDeleting ? "Excluindo..." : "Excluir"}
-            </Button>
-          )}
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={handleClose}>
-              Cancelar
-            </Button>
-            <Button onClick={handleSubmit} disabled={isLoading || isDeleting}>
               {isLoading ? (
                 <>Salvando...</>
               ) : isEditMode ? (
@@ -869,6 +887,13 @@ export function AppointmentModal({
               ) : (
                 <>Agendar</>
               )}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleClose}
+              className="w-full sm:w-auto"
+            >
+              Cancelar
             </Button>
           </div>
         </DialogFooter>
