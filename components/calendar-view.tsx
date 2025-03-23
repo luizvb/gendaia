@@ -100,32 +100,10 @@ export function CalendarView() {
 
   const calendarContainerRef = useRef<HTMLDivElement>(null);
 
-  // Helper function to convert local date to start of day in UTC
   const startOfDay = useCallback((date: Date) => {
     return new Date(
       Date.UTC(date.getFullYear(), date.getMonth(), date.getDate())
     );
-  }, []);
-
-  // Helper function to convert a local time slot to UTC for backend queries
-  const localToUTC = useCallback((localDate: Date) => {
-    // For UTC conversion, we need to create a UTC date with local time components
-    return new Date(
-      Date.UTC(
-        localDate.getFullYear(),
-        localDate.getMonth(),
-        localDate.getDate(),
-        localDate.getHours(),
-        localDate.getMinutes()
-      )
-    );
-  }, []);
-
-  // Helper function to convert UTC time to local time for display
-  const utcToLocal = useCallback((utcDateStr: string) => {
-    // Properly convert UTC date string to local date
-    const utcDate = new Date(utcDateStr);
-    return utcDate; // Browser automatically converts to local timezone
   }, []);
 
   // Wrap fetch functions in useCallback to prevent recreation on every render
@@ -534,64 +512,6 @@ export function CalendarView() {
     [filteredAppointments]
   );
 
-  // Modify the isSlotAvailable function to properly handle timezone conversions
-  const isSlotAvailable = useCallback(
-    (currentHour: Date, timeSlotAppointments: Appointment[]) => {
-      // Check if the slot is in the past
-      const now = new Date();
-      if (currentHour < now) return false;
-
-      // Check if there are any appointments starting exactly at this slot or overlapping it
-      if (timeSlotAppointments.length > 0) return false;
-
-      // Para debug - exibir horário do slot e hora UTC
-      // console.log(`Slot local: ${format(currentHour, "HH:mm")}`);
-
-      // Convert local time to UTC for API lookup
-      // Importante: devemos usar a mesma conversão que é usada no backend
-      const utcHour = new Date(
-        Date.UTC(
-          currentHour.getFullYear(),
-          currentHour.getMonth(),
-          currentHour.getDate(),
-          currentHour.getHours(),
-          currentHour.getMinutes()
-        )
-      );
-
-      // Format date in UTC
-      const formattedDate = format(utcHour, "yyyy-MM-dd");
-
-      // Format time in UTC format HH:MM - mesma convenção usada no backend
-      const timeStr = `${String(utcHour.getUTCHours()).padStart(
-        2,
-        "0"
-      )}:${String(utcHour.getUTCMinutes()).padStart(2, "0")}`;
-
-      // Para debug - exibir horário do slot em UTC após conversão
-      // console.log(`Slot UTC: ${timeStr}, data: ${formattedDate}`);
-
-      // If we have a selected professional, check availability for that professional
-      if (selectedProfessional) {
-        const availableSlots =
-          professionalsAvailability[selectedProfessional]?.[formattedDate] ||
-          [];
-        // Para debug - exibir slots disponíveis para este profissional nesta data
-        // console.log(`Slots disponíveis para ${selectedProfessional} em ${formattedDate}:`, availableSlots);
-
-        return availableSlots.includes(timeStr);
-      }
-
-      // If no professional is selected, the slot is available if any professional has it available
-      return Object.keys(professionalsAvailability).some((profId) => {
-        const availableSlots =
-          professionalsAvailability[profId]?.[formattedDate] || [];
-        return availableSlots.includes(timeStr);
-      });
-    },
-    [professionalsAvailability, selectedProfessional]
-  );
-
   // Gerar os horários do dia com base nos horários de funcionamento
   const dayHours = useMemo(() => {
     const slots: Date[] = [];
@@ -964,12 +884,6 @@ export function CalendarView() {
                               // Get all appointments for this time slot
                               const timeSlotAppointments =
                                 getTimeSlotAppointments(currentHour);
-
-                              // Update the calendar grid section (find the dayHours.map part)
-                              const isAvailable = isSlotAvailable(
-                                currentHour,
-                                timeSlotAppointments
-                              );
 
                               return (
                                 <div

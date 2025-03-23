@@ -8,6 +8,8 @@ export const dynamic = "force-dynamic";
 
 // Use timezone from utility
 const TIMEZONE = DEFAULT_TIMEZONE;
+// São Paulo timezone offset is typically UTC-3
+const SAO_PAULO_TIMEZONE = "America/Sao_Paulo";
 
 interface Appointment {
   start_time: string;
@@ -288,18 +290,28 @@ function calculateAvailableSlots(
   }
 
   // Parse business hours - these are stored in local time (e.g. "09:00")
-  // but need to be treated as UTC hours for consistent calculations
   const [openHour, openMinute] = dayHours.open_time.split(":").map(Number);
   const [closeHour, closeMinute] = dayHours.close_time.split(":").map(Number);
 
-  // Create UTC Date objects representing the business hours in UTC
-  // We're treating the local hours as if they were UTC hours
+  // Business hours in São Paulo time
+  const spOpenTime = `${String(openHour).padStart(2, "0")}:${String(
+    openMinute
+  ).padStart(2, "0")}`;
+  const spCloseTime = `${String(closeHour).padStart(2, "0")}:${String(
+    closeMinute
+  ).padStart(2, "0")}`;
+
+  // Calculate UTC times that correspond to the business hours in São Paulo time
+  // São Paulo is typically UTC-3, so we need to add 3 hours to convert from SP to UTC
+  const utcOffset = 3; // São Paulo to UTC offset
+
+  // Create UTC Date objects representing the business hours
   const dayStart = new Date(
     Date.UTC(
       currentDate.getUTCFullYear(),
       currentDate.getUTCMonth(),
       currentDate.getUTCDate(),
-      openHour,
+      openHour + utcOffset,
       openMinute
     )
   );
@@ -309,7 +321,7 @@ function calculateAvailableSlots(
       currentDate.getUTCFullYear(),
       currentDate.getUTCMonth(),
       currentDate.getUTCDate(),
-      closeHour,
+      closeHour + utcOffset,
       closeMinute
     )
   );
@@ -350,6 +362,30 @@ function calculateAvailableSlots(
     return date < now;
   };
 
+  // Function to convert UTC time to São Paulo time (formatted as HH:MM)
+  const convertToSaoPauloTime = (utcDate: Date): string => {
+    const formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: SAO_PAULO_TIMEZONE,
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+
+    // Format and extract just the time part, ensuring HH:MM format
+    const formattedTime = formatter.format(utcDate);
+    // Extract hours and minutes from the formatted string (format varies by browser)
+    const timeMatch = formattedTime.match(/(\d{1,2}):(\d{2})/);
+
+    if (timeMatch) {
+      const hours = String(timeMatch[1]).padStart(2, "0");
+      const minutes = timeMatch[2];
+      return `${hours}:${minutes}`;
+    }
+
+    // Fallback if regex fails (shouldn't happen)
+    return formattedTime.replace(/[^0-9:]/g, "");
+  };
+
   // Generate available slots every 15 minutes
   while (currentSlot < dayEnd) {
     // Calculate end time for service
@@ -374,11 +410,13 @@ function calculateAvailableSlots(
       continue;
     }
 
-    // Se chegamos aqui, o slot está disponível - formato como HH:MM em UTC
-    // IMPORTANTE: Este formato deve corresponder exatamente ao formato usado no frontend
-    const hours = String(currentSlot.getUTCHours()).padStart(2, "0");
-    const minutes = String(currentSlot.getUTCMinutes()).padStart(2, "0");
-    availableSlots.push(`${hours}:${minutes}`);
+    // Convert the UTC slot time to São Paulo time
+    const saoPauloTimeSlot = convertToSaoPauloTime(currentSlot);
+
+    // Only add slots that fall within the São Paulo business hours
+    if (saoPauloTimeSlot >= spOpenTime && saoPauloTimeSlot < spCloseTime) {
+      availableSlots.push(saoPauloTimeSlot);
+    }
 
     // Move to next 15-minute slot
     currentSlot.setUTCMinutes(currentSlot.getUTCMinutes() + 15);

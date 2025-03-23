@@ -7,7 +7,6 @@ import { useRouter } from "next/navigation";
 import { format, addDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Calendar, Phone, User } from "lucide-react";
-import { formatInTimeZone, toDate } from "date-fns-tz";
 
 import { Button } from "@/components/ui/button";
 import {
