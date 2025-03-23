@@ -8,7 +8,7 @@ import {
   setHours,
   setMinutes,
 } from "date-fns";
-import { toZonedTime } from "date-fns-tz";
+import { toZonedTime, formatInTimeZone } from "date-fns-tz";
 import { getBusinessId } from "@/lib/business-id";
 
 // Mark this route as dynamic to avoid static generation errors
@@ -136,18 +136,19 @@ export async function GET(request: NextRequest) {
       let currentDate = startDateTime;
       while (currentDate <= endDateTime) {
         // Convert to local date in the specified timezone for formatting
-        const zonedDate = toZonedTime(currentDate, TIMEZONE);
-        dates.push(format(zonedDate, "yyyy-MM-dd"));
+        dates.push(formatInTimeZone(currentDate, TIMEZONE, "yyyy-MM-dd"));
         currentDate = addDays(currentDate, 1);
       }
 
       // Fetch all appointments for the interval
-      const formattedStartDate = format(
-        toZonedTime(startDateTime, TIMEZONE),
+      const formattedStartDate = formatInTimeZone(
+        startDateTime,
+        TIMEZONE,
         "yyyy-MM-dd"
       );
-      const formattedEndDate = format(
-        toZonedTime(addDays(endDateTime, 1), TIMEZONE),
+      const formattedEndDate = formatInTimeZone(
+        addDays(endDateTime, 1),
+        TIMEZONE,
         "yyyy-MM-dd"
       );
 
@@ -271,8 +272,7 @@ function calculateAvailableSlots(
 
   // Get the day of week (0 = Sunday, 1 = Monday, etc.)
   // Use local timezone for day of week calculation
-  const zonedDate = toZonedTime(currentDate, TIMEZONE);
-  const dayOfWeek = zonedDate.getDay();
+  const dayOfWeek = currentDate.getDay();
 
   // Get business hours for this day
   const dayHours = businessHours.find((h) => h.day_of_week === dayOfWeek);
@@ -288,11 +288,11 @@ function calculateAvailableSlots(
 
   // Set start and end of workday in local timezone
   const dayStart = toZonedTime(
-    setMinutes(setHours(zonedDate, openHour), openMinute),
+    setMinutes(setHours(currentDate, openHour), openMinute),
     TIMEZONE
   );
   const dayEnd = toZonedTime(
-    setMinutes(setHours(zonedDate, closeHour), closeMinute),
+    setMinutes(setHours(currentDate, closeHour), closeMinute),
     TIMEZONE
   );
 
@@ -339,9 +339,8 @@ function calculateAvailableSlots(
       !hasConflict(currentSlot, serviceEnd) &&
       !isPast(currentSlot)
     ) {
-      // Convert the slot time to the local timezone for display
-      const localSlotTime = toZonedTime(currentSlot, TIMEZONE);
-      availableSlots.push(format(localSlotTime, "HH:mm"));
+      // Use formatInTimeZone directly instead of converting first
+      availableSlots.push(formatInTimeZone(currentSlot, TIMEZONE, "HH:mm"));
     }
 
     // Move to next 15-minute slot
