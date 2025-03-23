@@ -71,6 +71,11 @@ export default function BookingPage() {
   const [loadingAppointments, setLoadingAppointments] = useState(false);
   const [business, setBusiness] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [professionalsAvailability, setProfessionalsAvailability] = useState<{
+    [professionalId: string]: {
+      [date: string]: string[];
+    };
+  }>({});
 
   // Carregar telefone do localStorage ao iniciar
   useEffect(() => {
@@ -82,6 +87,31 @@ export default function BookingPage() {
       }
     }
   }, [activeTab]);
+
+  // Fetch all availability data
+  const fetchAllAvailability = async () => {
+    try {
+      const response = await fetch("/api/availability?fetch_all=true");
+      if (!response.ok) throw new Error("Falha ao carregar disponibilidades");
+      const data = await response.json();
+
+      // Transform the data into a more convenient format for lookup
+      const availabilityMap: {
+        [professionalId: string]: {
+          [date: string]: string[];
+        };
+      } = {};
+
+      data.professionals_availability.forEach((prof: any) => {
+        availabilityMap[prof.id] = prof.availability;
+      });
+
+      setProfessionalsAvailability(availabilityMap);
+    } catch (error) {
+      console.error("Erro ao carregar disponibilidades:", error);
+      setError("Não foi possível carregar os horários disponíveis");
+    }
+  };
 
   // Carregar serviços e profissionais
   useEffect(() => {
@@ -96,6 +126,9 @@ export default function BookingPage() {
         const professionalsResponse = await fetch("/api/professionals");
         const professionalsData = await professionalsResponse.json();
         setProfessionals(professionalsData);
+
+        // Fetch all availability
+        await fetchAllAvailability();
       } catch (error) {
         console.error("Erro ao carregar dados:", error);
         setError(
@@ -202,43 +235,35 @@ export default function BookingPage() {
         return;
       }
 
-      // Format date in UTC for API calls without timezone conversion
+      // Format date for lookup in the availability map
       const formattedDate = format(date, "yyyy-MM-dd");
 
-      // Always fetch fresh data from the API with the correct service duration
-      const response = await fetch(
-        `/api/availability?professional_id=${professional}&date=${formattedDate}&service_duration=${selectedService.duration}&business_id=${business.id}`
-      );
+      // Check if we have availability data for this professional and date
+      if (
+        !professionalsAvailability[professional] ||
+        !professionalsAvailability[professional][formattedDate]
+      ) {
+        // If we don't have data, fetch it
+        await fetchAllAvailability();
 
-      if (!response.ok) {
-        throw new Error("Falha ao buscar horários disponíveis");
+        // If still no data, return empty slots
+        if (
+          !professionalsAvailability[professional] ||
+          !professionalsAvailability[professional][formattedDate]
+        ) {
+          setTimeSlots([]);
+          return;
+        }
       }
 
-      const data = await response.json();
+      // Get available slots directly from the map without timezone conversion
+      const availableSlots =
+        professionalsAvailability[professional][formattedDate];
 
-      // Convert UTC time slots to local time for display
-      const localTimeSlots = data.available_slots.map((utcTimeStr: string) => {
-        const [hours, minutes] = utcTimeStr.split(":").map(Number);
+      // Sort slots by time
+      const sortedSlots = [...availableSlots].sort();
 
-        // Create a date with the UTC time
-        const utcDate = new Date(
-          Date.UTC(
-            date.getFullYear(),
-            date.getMonth(),
-            date.getDate(),
-            hours,
-            minutes
-          )
-        );
-
-        // Format in local time for display
-        return format(utcDate, "HH:mm");
-      });
-
-      // Sort by time
-      localTimeSlots.sort();
-
-      setTimeSlots(localTimeSlots);
+      setTimeSlots(sortedSlots);
     } catch (error) {
       console.error("Erro ao buscar horários disponíveis:", error);
       setError("Não foi possível carregar os horários disponíveis");
@@ -293,27 +318,19 @@ export default function BookingPage() {
       const selectedService = services.find((s) => s.id === service);
       const duration = selectedService?.duration || 30;
 
-      // Parse the selected time (which is in local time format)
+      // Parse the selected time
       const [hours, minutes] = time.split(":").map(Number);
 
-      // Convert local time to UTC
-      // Get the timezone offset in minutes
-      const tzOffset = new Date().getTimezoneOffset();
-
-      // Create a local date with the selected time
+      // Create a date with the selected time in local timezone
       const localDate = new Date(date);
       localDate.setHours(hours, minutes, 0, 0);
 
-      // Convert to UTC by adding the timezone offset
-      // For Brazil (UTC-3), we need to add 3 hours to get UTC time
-      const startTime = new Date(localDate.getTime() - tzOffset * 60000);
+      // Format in ISO
+      const startTimeISO = localDate.toISOString();
 
-      // Format in ISO with Z suffix to ensure UTC
-      const startTimeISO = startTime.toISOString();
-
-      // Calculate end time by adding duration (in UTC)
-      const endTime = new Date(startTime);
-      endTime.setUTCMinutes(endTime.getUTCMinutes() + duration);
+      // Calculate end time by adding duration
+      const endTime = new Date(localDate);
+      endTime.setMinutes(endTime.getMinutes() + duration);
       const endTimeISO = endTime.toISOString();
 
       // Enviar agendamento para a API
