@@ -163,20 +163,32 @@ export async function GET(request: NextRequest) {
 
       // Use provided date range if available, otherwise use days ahead
       if (startDate && endDate) {
-        // Parse dates as local dates in the specified timezone
-        startDateTime = toZonedTime(
-          parse(startDate, "yyyy-MM-dd", new Date()),
-          TIMEZONE
+        // Create dates with explicit timezone information
+        startDateTime = new Date(
+          `${startDate}T00:00:00.000${formatInTimeZone(
+            new Date(),
+            TIMEZONE,
+            "xxx"
+          )}`
         );
-        endDateTime = toZonedTime(
-          parse(endDate, "yyyy-MM-dd", new Date()),
-          TIMEZONE
+        endDateTime = new Date(
+          `${endDate}T00:00:00.000${formatInTimeZone(
+            new Date(),
+            TIMEZONE,
+            "xxx"
+          )}`
         );
       } else {
         // Use days ahead from today in the specified timezone
-        const today = toZonedTime(new Date(), TIMEZONE);
-        startDateTime = toZonedTime(today, TIMEZONE);
-        endDateTime = toZonedTime(addDays(today, daysAhead - 1), TIMEZONE);
+        const nowWithTz = new Date(
+          `${formatInTimeZone(
+            new Date(),
+            TIMEZONE,
+            "yyyy-MM-dd"
+          )}T00:00:00.000${formatInTimeZone(new Date(), TIMEZONE, "xxx")}`
+        );
+        startDateTime = nowWithTz;
+        endDateTime = addDays(nowWithTz, daysAhead - 1);
       }
 
       // Log calculated date range and always log key date information
@@ -384,16 +396,20 @@ function calculateAvailableSlots(
   businessHours: BusinessHours[]
 ): string[] {
   // Convert date string to Date object in the specific timezone
-  // First create a date at midnight in the local timezone
-  const parsedDate = parse(dateStr, "yyyy-MM-dd", new Date());
-
-  // Convert to the target timezone - this is important to handle DST correctly
-  const currentDate = toZonedTime(parsedDate, TIMEZONE);
+  // First create a date at midnight in the target timezone
+  const dateWithTz = new Date(
+    `${dateStr}T00:00:00.000${formatInTimeZone(
+      new Date(),
+      TIMEZONE,
+      "xxx" // Get current timezone offset
+    )}`
+  );
+  const currentDate = toZonedTime(dateWithTz, TIMEZONE);
 
   // Log critical information about the date
   alwaysLog(`Calculating availability for date ${dateStr}`, {
     inputDateStr: dateStr,
-    parsedDateISO: parsedDate.toISOString(),
+    dateWithTzISO: dateWithTz.toISOString(),
     currentDateISO: currentDate.toISOString(),
     currentDateFormatted: formatInTimeZone(currentDate, TIMEZONE, "yyyy-MM-dd"),
     currentDateWithTZ: formatInTimeZone(
@@ -406,7 +422,7 @@ function calculateAvailableSlots(
 
   // Log the date being processed
   debugLog(`Calculating slots for ${dateStr}`, {
-    parsedDate: parsedDate.toISOString(),
+    dateWithTz: dateWithTz.toISOString(),
     currentDateInTimezone: formatInTimeZone(
       currentDate,
       TIMEZONE,
@@ -428,31 +444,20 @@ function calculateAvailableSlots(
   }
 
   // Parse business hours - make sure to create date objects in the target timezone
-  const [openHour, openMinute] = dayHours.open_time.split(":").map(Number);
-  const [closeHour, closeMinute] = dayHours.close_time.split(":").map(Number);
+  const formattedDate = formatInTimeZone(currentDate, TIMEZONE, "yyyy-MM-dd");
 
-  // Construct full date strings with the business hours and parse them
-  const openTimeStr = `${formatInTimeZone(
-    currentDate,
-    TIMEZONE,
-    "yyyy-MM-dd"
-  )} ${dayHours.open_time}`;
-  const closeTimeStr = `${formatInTimeZone(
-    currentDate,
-    TIMEZONE,
-    "yyyy-MM-dd"
-  )} ${dayHours.close_time}`;
+  // Construct business hours dates using the formatted date and explicit timezone
+  const openTimeStr = `${formattedDate}T${
+    dayHours.open_time
+  }:00${formatInTimeZone(new Date(), TIMEZONE, "xxx")}`;
 
-  // Parse the full date strings and convert to the target timezone
-  const dayStart = toZonedTime(
-    parse(openTimeStr, "yyyy-MM-dd HH:mm", new Date()),
-    TIMEZONE
-  );
+  const closeTimeStr = `${formattedDate}T${
+    dayHours.close_time
+  }:00${formatInTimeZone(new Date(), TIMEZONE, "xxx")}`;
 
-  const dayEnd = toZonedTime(
-    parse(closeTimeStr, "yyyy-MM-dd HH:mm", new Date()),
-    TIMEZONE
-  );
+  // Parse the time strings with explicit timezone info
+  const dayStart = new Date(openTimeStr);
+  const dayEnd = new Date(closeTimeStr);
 
   // Log business hours
   alwaysLog(`Business hours for ${dateStr}`, {
@@ -481,8 +486,8 @@ function calculateAvailableSlots(
 
   // Convert all appointment times to our timezone explicitly
   const zonedAppointments = appointments.map((appointment) => {
-    const startTime = toZonedTime(new Date(appointment.start_time), TIMEZONE);
-    const endTime = toZonedTime(new Date(appointment.end_time), TIMEZONE);
+    const startTime = new Date(appointment.start_time);
+    const endTime = new Date(appointment.end_time);
     return {
       start_time: startTime,
       end_time: endTime,
@@ -519,9 +524,15 @@ function calculateAvailableSlots(
 
   // Function to check if a slot is in the past - using server-local now with timezone
   const isPast = (date: Date) => {
-    // Make sure to use the same timezone for both dates
-    const now = toZonedTime(new Date(), TIMEZONE);
-    return date < now;
+    // Create a now date that has the correct timezone information
+    const nowWithTz = new Date(
+      `${formatInTimeZone(
+        new Date(),
+        TIMEZONE,
+        "yyyy-MM-dd'T'HH:mm:ss"
+      )}${formatInTimeZone(new Date(), TIMEZONE, "xxx")}`
+    );
+    return date < nowWithTz;
   };
 
   // Count slots processed for debugging
@@ -562,7 +573,7 @@ function calculateAvailableSlots(
 
     // If we get here, the slot is available
     availableCount++;
-    // Always use formatInTimeZone to ensure consistent format in all environments
+    // Format the time consistently to ensure it works in all environments
     availableSlots.push(formatInTimeZone(currentSlot, TIMEZONE, "HH:mm"));
 
     // Move to next 15-minute slot
