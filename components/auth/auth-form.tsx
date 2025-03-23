@@ -98,7 +98,8 @@ export function AuthForm({ view }: { view: "sign-in" | "sign-up" }) {
       if (error) {
         setError(error.message);
       } else {
-        setMessage("Verifique seu email para confirmar seu cadastro.");
+        router.push("/dashboard/calendar");
+        router.refresh();
       }
     } catch (error) {
       setError("Ocorreu um erro ao criar sua conta. Tente novamente.");

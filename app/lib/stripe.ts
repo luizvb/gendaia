@@ -25,9 +25,9 @@ export const formatPrice = (price: number) => {
 
 // Stripe product IDs for each plan
 export const STRIPE_PLANS = {
-  BASIC: process.env.STRIPE_BASIC_PLAN_ID!,
-  PRO: process.env.STRIPE_PRO_PLAN_ID!,
-  ENTERPRISE: process.env.STRIPE_ENTERPRISE_PLAN_ID!,
+  BASIC: process.env.STRIPE_BASIC_PLAN_ID,
+  PRO: process.env.STRIPE_PRO_PLAN_ID,
+  ENTERPRISE: process.env.STRIPE_ENTERPRISE_PLAN_ID,
 };
 
 // Trial period in days

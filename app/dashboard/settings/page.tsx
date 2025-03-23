@@ -355,7 +355,7 @@ export default function SettingsPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Configurações</h1>
           <p className="text-muted-foreground">
-            Configure as informações da sua GENDAIA
+            Configure as informações do seu negócio.
           </p>
         </div>
         <Button onClick={handleSave} disabled={loading} className="gap-2">
@@ -378,15 +378,15 @@ export default function SettingsPage() {
         <TabsContent value="general">
           <Card>
             <CardHeader>
-              <CardTitle>Informações da GENDAIA</CardTitle>
+              <CardTitle>Informações do negócio</CardTitle>
               <CardDescription>
-                Configure as informações básicas da sua GENDAIA.
+                Configure as informações básicas do seu negócio.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="grid gap-2">
-                  <Label htmlFor="name">Nome da GENDAIA</Label>
+                  <Label htmlFor="name">Nome do negócio</Label>
                   <Input
                     id="name"
                     name="name"
@@ -488,7 +488,7 @@ export default function SettingsPage() {
             <CardHeader>
               <CardTitle>Horários de Funcionamento</CardTitle>
               <CardDescription>
-                Configure os horários de funcionamento da sua GENDAIA.
+                Configure os horários de funcionamento do seu negócio.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
