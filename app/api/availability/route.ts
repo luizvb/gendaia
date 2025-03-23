@@ -17,6 +17,21 @@ export const dynamic = "force-dynamic";
 // Set timezone for Brazil
 const TIMEZONE = "America/Sao_Paulo";
 
+// Debug mode setting - set to true to enable detailed logging
+const DEBUG_MODE = true;
+
+// Helper logging function
+const debugLog = (message: string, data: any) => {
+  if (DEBUG_MODE) {
+    console.log(`DEBUG: ${message}`, JSON.stringify(data, null, 2));
+  }
+};
+
+// Always log function for critical information - will show in production and development
+const alwaysLog = (message: string, data: any) => {
+  console.log(`CRITICAL LOG: ${message}`, JSON.stringify(data, null, 2));
+};
+
 interface Appointment {
   start_time: string;
   end_time: string;
@@ -47,6 +62,39 @@ export async function GET(request: NextRequest) {
     const serviceDuration = parseInt(
       searchParams.get("service_duration") || "30"
     );
+
+    // Log request parameters
+    debugLog("Request parameters", {
+      professionalId,
+      date,
+      startDate,
+      endDate,
+      serviceDuration,
+      timezone: TIMEZONE,
+      serverTime: new Date().toISOString(),
+      serverTimeInBrazil: formatInTimeZone(
+        new Date(),
+        TIMEZONE,
+        "yyyy-MM-dd'T'HH:mm:ssXXX"
+      ),
+    });
+
+    // Always log critical timezone information
+    alwaysLog("Timezone check", {
+      timezone: TIMEZONE,
+      serverTime: new Date().toISOString(),
+      serverTimeInBrazil: formatInTimeZone(
+        new Date(),
+        TIMEZONE,
+        "yyyy-MM-dd'T'HH:mm:ssXXX"
+      ),
+      requestParams: {
+        professionalId,
+        date,
+        startDate,
+        endDate,
+      },
+    });
 
     const fetchAll = searchParams.get("fetch_all") === "true";
     const daysAhead = parseInt(searchParams.get("days_ahead") || "15");
@@ -131,6 +179,38 @@ export async function GET(request: NextRequest) {
         endDateTime = toZonedTime(addDays(today, daysAhead - 1), TIMEZONE);
       }
 
+      // Log calculated date range and always log key date information
+      debugLog("Date range", {
+        startDateTime: startDateTime.toISOString(),
+        endDateTime: endDateTime.toISOString(),
+        startDateTimeFormatted: formatInTimeZone(
+          startDateTime,
+          TIMEZONE,
+          "yyyy-MM-dd'T'HH:mm:ssXXX"
+        ),
+        endDateTimeFormatted: formatInTimeZone(
+          endDateTime,
+          TIMEZONE,
+          "yyyy-MM-dd'T'HH:mm:ssXXX"
+        ),
+      });
+
+      alwaysLog("Date range calculation result", {
+        startDate: startDate,
+        endDate: endDate,
+        daysAhead: daysAhead,
+        calculatedStartDate: formatInTimeZone(
+          startDateTime,
+          TIMEZONE,
+          "yyyy-MM-dd"
+        ),
+        calculatedEndDate: formatInTimeZone(
+          endDateTime,
+          TIMEZONE,
+          "yyyy-MM-dd"
+        ),
+      });
+
       // Generate dates for the specified interval
       const dates: string[] = [];
       let currentDate = startDateTime;
@@ -151,6 +231,13 @@ export async function GET(request: NextRequest) {
         TIMEZONE,
         "yyyy-MM-dd"
       );
+
+      debugLog("Formatted date range for query", {
+        formattedStartDate,
+        formattedEndDate,
+        queryStart: `${formattedStartDate}T00:00:00`,
+        queryEnd: `${formattedEndDate}T00:00:00`,
+      });
 
       let appointmentsQuery = supabase
         .from("appointments")
@@ -204,6 +291,36 @@ export async function GET(request: NextRequest) {
             availability,
           };
         });
+
+      // For specific debugging cases, add detailed logs for a professional
+      if (professionals.length > 0) {
+        const firstProfessional = professionals[0];
+        if (dates.length > 0) {
+          const firstDate = dates[0];
+          const professionalAppointments = allAppointments.filter(
+            (app: Appointment) =>
+              app.professional_id === firstProfessional.id &&
+              app.start_time.startsWith(firstDate)
+          );
+
+          debugLog(
+            `Debug availability calculation for professional ${firstProfessional.id} on ${firstDate}`,
+            {
+              professionalId: firstProfessional.id,
+              date: firstDate,
+              appointments: professionalAppointments,
+              businessHours: hours.find(
+                (h) =>
+                  h.day_of_week ===
+                  toZonedTime(
+                    parse(firstDate, "yyyy-MM-dd", new Date()),
+                    TIMEZONE
+                  ).getDay()
+              ),
+            }
+          );
+        }
+      }
 
       return NextResponse.json({
         professionals_availability: professionalAvailability,
@@ -267,11 +384,38 @@ function calculateAvailableSlots(
   businessHours: BusinessHours[]
 ): string[] {
   // Convert date string to Date object in the specific timezone
+  // First create a date at midnight in the local timezone
   const parsedDate = parse(dateStr, "yyyy-MM-dd", new Date());
+
+  // Convert to the target timezone - this is important to handle DST correctly
   const currentDate = toZonedTime(parsedDate, TIMEZONE);
 
+  // Log critical information about the date
+  alwaysLog(`Calculating availability for date ${dateStr}`, {
+    inputDateStr: dateStr,
+    parsedDateISO: parsedDate.toISOString(),
+    currentDateISO: currentDate.toISOString(),
+    currentDateFormatted: formatInTimeZone(currentDate, TIMEZONE, "yyyy-MM-dd"),
+    currentDateWithTZ: formatInTimeZone(
+      currentDate,
+      TIMEZONE,
+      "yyyy-MM-dd'T'HH:mm:ssXXX"
+    ),
+    dayOfWeek: currentDate.getDay(),
+  });
+
+  // Log the date being processed
+  debugLog(`Calculating slots for ${dateStr}`, {
+    parsedDate: parsedDate.toISOString(),
+    currentDateInTimezone: formatInTimeZone(
+      currentDate,
+      TIMEZONE,
+      "yyyy-MM-dd'T'HH:mm:ssXXX"
+    ),
+    dayOfWeek: currentDate.getDay(),
+  });
+
   // Get the day of week (0 = Sunday, 1 = Monday, etc.)
-  // Use local timezone for day of week calculation
   const dayOfWeek = currentDate.getDay();
 
   // Get business hours for this day
@@ -279,35 +423,85 @@ function calculateAvailableSlots(
 
   // If business is closed on this day or hours not found, return empty array
   if (!dayHours || !dayHours.is_open) {
+    debugLog(`Business closed on ${dateStr}`, { dayOfWeek, dayHours });
     return [];
   }
 
-  // Parse business hours
+  // Parse business hours - make sure to create date objects in the target timezone
   const [openHour, openMinute] = dayHours.open_time.split(":").map(Number);
   const [closeHour, closeMinute] = dayHours.close_time.split(":").map(Number);
 
-  // Set start and end of workday in local timezone
+  // Construct full date strings with the business hours and parse them
+  const openTimeStr = `${formatInTimeZone(
+    currentDate,
+    TIMEZONE,
+    "yyyy-MM-dd"
+  )} ${dayHours.open_time}`;
+  const closeTimeStr = `${formatInTimeZone(
+    currentDate,
+    TIMEZONE,
+    "yyyy-MM-dd"
+  )} ${dayHours.close_time}`;
+
+  // Parse the full date strings and convert to the target timezone
   const dayStart = toZonedTime(
-    setMinutes(setHours(currentDate, openHour), openMinute),
+    parse(openTimeStr, "yyyy-MM-dd HH:mm", new Date()),
     TIMEZONE
   );
+
   const dayEnd = toZonedTime(
-    setMinutes(setHours(currentDate, closeHour), closeMinute),
+    parse(closeTimeStr, "yyyy-MM-dd HH:mm", new Date()),
     TIMEZONE
   );
+
+  // Log business hours
+  alwaysLog(`Business hours for ${dateStr}`, {
+    openTimeRaw: dayHours.open_time,
+    closeTimeRaw: dayHours.close_time,
+    openTimeStr,
+    closeTimeStr,
+    dayStartISO: dayStart.toISOString(),
+    dayEndISO: dayEnd.toISOString(),
+    dayStartFormatted: formatInTimeZone(
+      dayStart,
+      TIMEZONE,
+      "yyyy-MM-dd'T'HH:mm:ssXXX"
+    ),
+    dayEndFormatted: formatInTimeZone(
+      dayEnd,
+      TIMEZONE,
+      "yyyy-MM-dd'T'HH:mm:ssXXX"
+    ),
+    appointmentsCount: appointments.length,
+  });
 
   // Initialize array of available slots
   const availableSlots: string[] = [];
   let currentSlot = dayStart;
 
+  // Convert all appointment times to our timezone explicitly
+  const zonedAppointments = appointments.map((appointment) => {
+    const startTime = toZonedTime(new Date(appointment.start_time), TIMEZONE);
+    const endTime = toZonedTime(new Date(appointment.end_time), TIMEZONE);
+    return {
+      start_time: startTime,
+      end_time: endTime,
+      professional_id: appointment.professional_id,
+      raw_start: appointment.start_time,
+      raw_end: appointment.end_time,
+      startISO: startTime.toISOString(),
+      endISO: endTime.toISOString(),
+    };
+  });
+
   // Function to check if a time conflicts with existing appointments
   const hasConflict = (start: Date, end: Date) => {
-    return (appointments || []).some((appointment: Appointment) => {
-      const appointmentStart = new Date(appointment.start_time);
-      const appointmentEnd = new Date(appointment.end_time);
+    for (const appointment of zonedAppointments) {
+      const appointmentStart = appointment.start_time;
+      const appointmentEnd = appointment.end_time;
 
       // Check for overlap between intervals
-      return (
+      if (
         (start < appointmentEnd && end > appointmentStart) ||
         // Also check specific cases of exact start/end
         start.getTime() === appointmentStart.getTime() ||
@@ -316,36 +510,76 @@ function calculateAvailableSlots(
         (start >= appointmentStart && end <= appointmentEnd) ||
         // Check if appointment is completely within slot
         (appointmentStart >= start && appointmentEnd <= end)
-      );
-    });
+      ) {
+        return true;
+      }
+    }
+    return false;
   };
 
   // Function to check if a slot is in the past - using server-local now with timezone
   const isPast = (date: Date) => {
+    // Make sure to use the same timezone for both dates
     const now = toZonedTime(new Date(), TIMEZONE);
     return date < now;
   };
 
+  // Count slots processed for debugging
+  let processedSlots = 0;
+  let availableCount = 0;
+  let pastCount = 0;
+  let conflictCount = 0;
+  let outOfRangeCount = 0;
+
   // Generate available slots every 15 minutes
   while (currentSlot < dayEnd) {
+    processedSlots++;
     // For each 15-minute slot, we check if a service with the given duration would fit
     const serviceEnd = addMinutes(currentSlot, serviceDuration);
 
-    // Check if the entire service fits within business hours
-    // and if there's no conflict with other appointments
-    // and if the slot is not in the past
-    if (
-      serviceEnd <= dayEnd &&
-      !hasConflict(currentSlot, serviceEnd) &&
-      !isPast(currentSlot)
-    ) {
-      // Use formatInTimeZone directly instead of converting first
-      availableSlots.push(formatInTimeZone(currentSlot, TIMEZONE, "HH:mm"));
+    // Skip out of range slots
+    if (serviceEnd > dayEnd) {
+      outOfRangeCount++;
+      currentSlot = addMinutes(currentSlot, 15);
+      continue;
     }
+
+    // Check conflicts
+    const hasTimeConflict = hasConflict(currentSlot, serviceEnd);
+    if (hasTimeConflict) {
+      conflictCount++;
+      currentSlot = addMinutes(currentSlot, 15);
+      continue;
+    }
+
+    // Check if in past
+    const isInPast = isPast(currentSlot);
+    if (isInPast) {
+      pastCount++;
+      currentSlot = addMinutes(currentSlot, 15);
+      continue;
+    }
+
+    // If we get here, the slot is available
+    availableCount++;
+    // Always use formatInTimeZone to ensure consistent format in all environments
+    availableSlots.push(formatInTimeZone(currentSlot, TIMEZONE, "HH:mm"));
 
     // Move to next 15-minute slot
     currentSlot = addMinutes(currentSlot, 15);
   }
+
+  // Log availability results
+  alwaysLog(`Final availability for ${dateStr}`, {
+    totalProcessed: processedSlots,
+    availableCount,
+    pastCount,
+    conflictCount,
+    outOfRangeCount,
+    availableSlots,
+    dateProcessed: dateStr,
+    dayOfWeek: dayOfWeek,
+  });
 
   return availableSlots;
 }
