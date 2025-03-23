@@ -65,6 +65,7 @@ export const GET = async (request: NextRequest) => {
     const supabase = await createClient();
     const { searchParams } = new URL(request.url);
     const publicBusinessId = searchParams.get("business_id");
+    const headerBusinessId = request.headers.get("X-Business-ID");
 
     // If business_id is provided in query params, use it (public access)
     // Otherwise, get from session (authenticated access)
@@ -72,6 +73,8 @@ export const GET = async (request: NextRequest) => {
 
     if (publicBusinessId) {
       businessId = publicBusinessId;
+    } else if (headerBusinessId) {
+      businessId = headerBusinessId;
     } else {
       const {
         data: { session },
@@ -119,16 +122,24 @@ export const GET = async (request: NextRequest) => {
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
+    const headerBusinessId = request.headers.get("X-Business-ID");
 
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    let businessId;
+
+    if (headerBusinessId) {
+      businessId = headerBusinessId;
+    } else {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+
+      // Get the business_id using our utility function
+      businessId = await getBusinessId(request);
     }
 
-    // Get the business_id using our utility function
-    const businessId = await getBusinessId(request);
     if (!businessId) {
       return NextResponse.json(
         { error: "Business not found" },
@@ -179,16 +190,24 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const supabase = await createClient();
+    const headerBusinessId = request.headers.get("X-Business-ID");
 
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    let businessId;
+
+    if (headerBusinessId) {
+      businessId = headerBusinessId;
+    } else {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+
+      // Get the business_id using our utility function
+      businessId = await getBusinessId(request);
     }
 
-    // Get the business_id using our utility function
-    const businessId = await getBusinessId(request);
     if (!businessId) {
       return NextResponse.json(
         { error: "Business not found" },
@@ -241,16 +260,24 @@ export async function PUT(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     const supabase = await createClient();
+    const headerBusinessId = request.headers.get("X-Business-ID");
 
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    let businessId;
+
+    if (headerBusinessId) {
+      businessId = headerBusinessId;
+    } else {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+
+      // Get the business_id using our utility function
+      businessId = await getBusinessId(request);
     }
 
-    // Get the business_id using our utility function
-    const businessId = await getBusinessId(request);
     if (!businessId) {
       return NextResponse.json(
         { error: "Business not found" },

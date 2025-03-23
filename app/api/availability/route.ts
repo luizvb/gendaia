@@ -45,8 +45,32 @@ export async function GET(request: NextRequest) {
     const fetchAll = searchParams.get("fetch_all") === "true";
     const daysAhead = parseInt(searchParams.get("days_ahead") || "15");
 
-    const businessId =
-      (await getBusinessId(request)) || searchParams.get("business_id");
+    const headerBusinessId = request.headers.get("X-Business-ID");
+    const queryBusinessId = searchParams.get("business_id");
+
+    // Get business ID from header, query param, or session
+    let businessId;
+
+    if (headerBusinessId) {
+      businessId = headerBusinessId;
+    } else if (queryBusinessId) {
+      businessId = queryBusinessId;
+    } else {
+      // Create Supabase client
+      const supabase = await createClient();
+
+      // Try to get business ID from session
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+
+      businessId = await getBusinessId(request);
+    }
+
     if (!businessId) {
       return NextResponse.json(
         { error: "Business not found" },

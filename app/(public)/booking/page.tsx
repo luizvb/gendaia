@@ -77,6 +77,19 @@ export default function BookingPage() {
     };
   }>({});
 
+  // Helper function to create headers with businessId
+  const createHeaders = () => {
+    const headers: HeadersInit = {
+      "Content-Type": "application/json",
+    };
+
+    if (business?.id) {
+      headers["X-Business-ID"] = business.id;
+    }
+
+    return headers;
+  };
+
   // Carregar telefone do localStorage ao iniciar
   useEffect(() => {
     const savedPhone = localStorage.getItem(PHONE_STORAGE_KEY);
@@ -91,7 +104,9 @@ export default function BookingPage() {
   // Fetch all availability data
   const fetchAllAvailability = async () => {
     try {
-      const response = await fetch("/api/availability?fetch_all=true");
+      const response = await fetch("/api/availability?fetch_all=true", {
+        headers: createHeaders(),
+      });
       if (!response.ok) throw new Error("Falha ao carregar disponibilidades");
       const data = await response.json();
 
@@ -118,12 +133,16 @@ export default function BookingPage() {
     const fetchData = async () => {
       try {
         // Buscar serviços
-        const servicesResponse = await fetch("/api/services");
+        const servicesResponse = await fetch("/api/services", {
+          headers: createHeaders(),
+        });
         const servicesData = await servicesResponse.json();
         setServices(servicesData);
 
         // Buscar profissionais
-        const professionalsResponse = await fetch("/api/professionals");
+        const professionalsResponse = await fetch("/api/professionals", {
+          headers: createHeaders(),
+        });
         const professionalsData = await professionalsResponse.json();
         setProfessionals(professionalsData);
 
@@ -195,19 +214,23 @@ export default function BookingPage() {
 
   const fetchData = async (businessId: string) => {
     try {
+      // Set business ID in headers
+      const headers = {
+        "Content-Type": "application/json",
+        "X-Business-ID": businessId,
+      };
+
       // Fetch professionals
-      const professionalsResponse = await fetch(
-        `/api/professionals?business_id=${businessId}`
-      );
+      const professionalsResponse = await fetch("/api/professionals", {
+        headers,
+      });
       if (!professionalsResponse.ok)
         throw new Error("Failed to load professionals");
       const professionalsData = await professionalsResponse.json();
       setProfessionals(professionalsData);
 
       // Fetch services
-      const servicesResponse = await fetch(
-        `/api/services?business_id=${businessId}`
-      );
+      const servicesResponse = await fetch("/api/services", { headers });
       if (!servicesResponse.ok) throw new Error("Failed to load services");
       const servicesData = await servicesResponse.json();
       setServices(servicesData);
@@ -280,9 +303,8 @@ export default function BookingPage() {
     setLoadingAppointments(true);
     try {
       const response = await fetch(
-        `/api/appointments?phone=${encodeURIComponent(
-          normalizedPhone
-        )}&business_id=${business.id}`
+        `/api/appointments?phone=${encodeURIComponent(normalizedPhone)}`,
+        { headers: createHeaders() }
       );
       const data = await response.json();
       setAppointments(data);
@@ -336,9 +358,7 @@ export default function BookingPage() {
       // Enviar agendamento para a API
       const response = await fetch("/api/appointments", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: createHeaders(),
         body: JSON.stringify({
           client_name: name,
           client_phone: normalizedPhone,
@@ -346,7 +366,6 @@ export default function BookingPage() {
           end_time: endTimeISO,
           professional_id: professional,
           service_id: service,
-          business_id: business.id,
           status: "scheduled",
         }),
       });
@@ -402,6 +421,7 @@ export default function BookingPage() {
     try {
       const response = await fetch(`/api/appointments/${appointmentId}`, {
         method: "DELETE",
+        headers: createHeaders(),
       });
 
       if (!response.ok) {
