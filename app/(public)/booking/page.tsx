@@ -121,23 +121,40 @@ export default function BookingPage() {
       try {
         setIsLoading(true);
 
-        // Get subdomain from the hostname or query string
+        // Get full hostname and extract subdomain
         const hostname = window.location.hostname;
-        const urlParams = new URLSearchParams(window.location.search);
-        let subdomain = urlParams.get("subdomain") || urlParams.get("business");
+        let subdomain;
 
-        // If not in query string, try to get from hostname
-        if (!subdomain && hostname.includes(".gendaia.com.br")) {
-          subdomain = hostname.split(".")[0];
+        // Check URL params first
+        const urlParams = new URLSearchParams(window.location.search);
+        subdomain = urlParams.get("subdomain") || urlParams.get("business");
+
+        // If not in query params, extract from hostname
+        if (!subdomain) {
+          // For domain.com or subdomain.domain.com format
+          if (hostname !== "localhost") {
+            // Handle multiple potential domain patterns
+            if (hostname.includes(".gendaia.com.br")) {
+              subdomain = hostname.split(".gendaia")[0];
+            } else if (hostname.split(".").length > 2) {
+              // For any subdomain.domain.com format
+              subdomain = hostname.split(".")[0];
+            }
+          }
         }
 
         if (!subdomain) {
           throw new Error("Business not specified");
         }
 
+        // Ensure subdomain is lowercase
+        subdomain = subdomain.toLowerCase();
+
         // Fetch business data by subdomain
         const response = await fetch(
-          `/api/businesses/by-subdomain?subdomain=${subdomain}`
+          `/api/businesses/by-subdomain?subdomain=${encodeURIComponent(
+            subdomain
+          )}`
         );
 
         if (!response.ok) {
