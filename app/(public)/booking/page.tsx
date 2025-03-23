@@ -128,6 +128,7 @@ export default function BookingPage() {
         // Check URL params first
         const urlParams = new URLSearchParams(window.location.search);
         subdomain = urlParams.get("subdomain") || urlParams.get("business");
+        console.log("subdomain", subdomain);
 
         // If not in query params, extract from hostname
         if (!subdomain) {
