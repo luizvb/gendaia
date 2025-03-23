@@ -55,19 +55,8 @@ export const GET = async (request: NextRequest) => {
 
     // Apply filters if provided
     if (phone) {
-      // Join with clients table to filter by phone
-      query = supabase
-        .from("appointments")
-        .select(
-          `
-          *,
-          professionals:professional_id (id, name),
-          services:service_id (id, name, duration, price),
-          clients:client_id (id, name, phone)
-        `
-        )
-        .eq("business_id", businessId)
-        .eq("clients.phone", phone);
+      // Filter by client phone
+      query = query.eq("clients.phone", phone);
     }
 
     // Execute query
