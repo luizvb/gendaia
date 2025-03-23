@@ -123,38 +123,20 @@ export default function BookingPage() {
 
         // Get full hostname and extract subdomain
         const hostname = window.location.hostname;
-        let subdomain;
+        console.log("Hostname:", hostname);
 
         // Check URL params first
         const urlParams = new URLSearchParams(window.location.search);
-        subdomain = urlParams.get("subdomain") || urlParams.get("business");
-        console.log("subdomain", subdomain);
+        const businessParam = urlParams.get("business");
 
-        // If not in query params, extract from hostname
-        if (!subdomain) {
-          // For domain.com or subdomain.domain.com format
-          if (hostname !== "localhost") {
-            // Handle multiple potential domain patterns
-            if (hostname.includes(".gendaia.com.br")) {
-              subdomain = hostname.split(".gendaia")[0];
-            } else if (hostname.split(".").length > 2) {
-              // For any subdomain.domain.com format
-              subdomain = hostname.split(".")[0];
-            }
-          }
-        }
+        // Use business param from URL if available, otherwise use hostname
+        const queryParam = businessParam || hostname;
+        console.log("Using query param:", queryParam);
 
-        if (!subdomain) {
-          throw new Error("Business not specified");
-        }
-
-        // Ensure subdomain is lowercase
-        subdomain = subdomain.toLowerCase();
-
-        // Fetch business data by subdomain
+        // Fetch business data by hostname
         const response = await fetch(
-          `/api/businesses/by-subdomain?subdomain=${encodeURIComponent(
-            subdomain
+          `/api/businesses/by-subdomain?hostname=${encodeURIComponent(
+            queryParam
           )}`
         );
 
