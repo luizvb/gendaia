@@ -1,16 +1,19 @@
-import { SupabaseClient } from "@supabase/supabase-js";
-import { findProfessionalByName, findServiceByName } from "./search-utils";
-import {
-  BUSINESS_HOURS,
-  getBusinessDayLimits,
-  hasAppointmentConflict,
-  isWithinBusinessHours,
-} from "./date-utils";
-
 // Tipos de cache que podem ser invalidados
 export enum CacheTags {
   APPOINTMENTS = "appointments",
   DASHBOARD = "dashboard",
+}
+
+// São Paulo timezone offset is typically UTC-3
+const SAO_PAULO_TIMEZONE = "America/Sao_Paulo";
+
+// URL base para as requisições de API
+function getBaseUrl() {
+  // Durante o desenvolvimento, retornamos a URL local
+  // Em produção, usamos a URL real do site
+  return typeof window !== "undefined"
+    ? "" // URL relativa no cliente
+    : process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"; // URL absoluta no servidor
 }
 
 // Funções de cache simplificadas para o exemplo
@@ -51,728 +54,685 @@ export interface ServiceResult {
   }> | null;
 }
 
-export async function handleListServices(
-  supabase: SupabaseClient,
-  businessId: string
-) {
-  const { data: services, error: servicesError } = await supabase
-    .from("services")
-    .select("id, name, duration, price")
-    .eq("business_id", businessId)
-    .order("name");
+export async function handleListServices(businessId: string) {
+  try {
+    // Garantir que businessId seja uma string
+    const businessIdStr =
+      typeof businessId === "object"
+        ? (businessId as any).id || JSON.stringify(businessId)
+        : String(businessId);
 
-  if (servicesError) {
-    throw new Error(`Erro ao buscar serviços: ${servicesError.message}`);
-  }
+    // Construir URL para a API de serviços
+    const baseUrl = getBaseUrl();
+    const url = `${baseUrl}/api/services`;
 
-  return {
-    json: {
-      services: services || [],
-    },
-  };
-}
+    // Fazer requisição para a API
+    const response = await fetch(url, {
+      headers: {
+        "X-Business-ID": businessIdStr,
+      },
+    });
 
-export async function handleListProfessionals(
-  supabase: SupabaseClient,
-  businessId: string
-) {
-  const { data: professionals, error: professionalsError } = await supabase
-    .from("professionals")
-    .select("id, name")
-    .eq("business_id", businessId)
-    .order("name");
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Erro ao buscar serviços: ${errorText}`);
+    }
 
-  if (professionalsError) {
+    const services = await response.json();
+
+    return {
+      json: {
+        services,
+      },
+    };
+  } catch (error) {
     throw new Error(
-      `Erro ao buscar profissionais: ${professionalsError.message}`
+      `Erro ao buscar serviços: ${
+        error instanceof Error ? error.message : String(error)
+      }`
     );
   }
+}
 
-  return {
-    json: {
-      professionals: professionals || [],
-    },
-  };
+export async function handleListProfessionals(businessId: string) {
+  try {
+    // Garantir que businessId seja uma string
+    const businessIdStr =
+      typeof businessId === "object"
+        ? (businessId as any).id || JSON.stringify(businessId)
+        : String(businessId);
+
+    // Construir URL para a API de profissionais
+    const baseUrl = getBaseUrl();
+    const url = `${baseUrl}/api/professionals`;
+
+    // Fazer requisição para a API
+    const response = await fetch(url, {
+      headers: {
+        "X-Business-ID": businessIdStr,
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Erro ao buscar profissionais: ${errorText}`);
+    }
+
+    const professionals = await response.json();
+
+    return {
+      json: {
+        professionals,
+      },
+    };
+  } catch (error) {
+    throw new Error(
+      `Erro ao buscar profissionais: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
+  }
 }
 
 export async function handleCheckAvailability(
-  supabase: SupabaseClient,
   businessId: string,
   input: {
-    professionalId?: string;
+    professional_id?: string;
     date: string;
-    serviceId?: string;
+    service_id?: string;
   }
 ) {
-  let serviceDuration = 30; // default duration
-  let professionalIdForAvailability = input.professionalId;
-  let professionalName = input.professionalId;
-  let serviceIdForAvailability = input.serviceId;
-  let serviceName = input.serviceId;
-  let serviceSuggestions = null;
+  try {
+    // Garantir que businessId seja uma string
+    const businessIdStr =
+      typeof businessId === "object"
+        ? (businessId as any).id || JSON.stringify(businessId)
+        : String(businessId);
 
-  // Validate professionalId if provided
-  if (input.professionalId) {
-    const professionalData = await findProfessionalByName(
-      supabase,
-      input.professionalId,
-      businessId
-    );
+    let professionalIdToUse = input.professional_id;
 
-    if (!professionalData) {
-      throw new Error(`Profissional não encontrado: ${input.professionalId}`);
-    }
-
-    professionalIdForAvailability = professionalData.id;
-    professionalName = professionalData.name;
-  }
-
-  // Validate serviceId if provided
-  if (input.serviceId) {
-    const serviceResult = await findServiceByName(
-      supabase,
-      input.serviceId,
-      businessId
-    );
-
-    if (!serviceResult.found || !serviceResult.service) {
-      return {
-        json: {
-          available: false,
-          date: input.date,
-          serviceNotFound: true,
-          searchTerm: input.serviceId,
-          suggestions: serviceResult.suggestions || [],
-          message: `Serviço "${input.serviceId}" não encontrado. Aqui estão algumas opções disponíveis.`,
-        },
-      };
-    }
-
-    serviceIdForAvailability = serviceResult.service.id;
-    serviceName = serviceResult.service.name;
-    serviceSuggestions = serviceResult.suggestions;
-    serviceDuration = serviceResult.service.duration || serviceDuration;
-  }
-
-  // Get existing appointments
-  const { data: existingAppointments, error: appointmentsError } =
-    await supabase
-      .from("appointments")
-      .select("start_time, end_time")
-      .eq("business_id", businessId)
-      .eq("professional_id", professionalIdForAvailability)
-      .gte("start_time", `${input.date}T00:00:00`)
-      .lt("start_time", `${input.date}T23:59:59`)
-      .order("start_time");
-
-  if (appointmentsError) {
-    throw new Error(
-      `Erro ao verificar disponibilidade: ${appointmentsError.message}`
-    );
-  }
-
-  const { dayStart, dayEnd } = getBusinessDayLimits(input.date);
-
-  // Generate available slots
-  const availableSlots: string[] = [];
-  let currentSlot = new Date(dayStart);
-
-  while (currentSlot < dayEnd) {
-    const slotEnd = new Date(currentSlot);
-    slotEnd.setMinutes(slotEnd.getMinutes() + serviceDuration);
-
+    // Verificar se professionalId parece ser um nome em vez de um UUID
     if (
-      slotEnd <= dayEnd &&
-      !hasAppointmentConflict(currentSlot, slotEnd, existingAppointments || [])
+      professionalIdToUse &&
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        professionalIdToUse
+      )
     ) {
-      availableSlots.push(currentSlot.toTimeString().substring(0, 5));
+      console.log(
+        `⚠️ Detectado nome de profissional em vez de ID: ${professionalIdToUse}. Tentando converter para ID...`
+      );
+
+      try {
+        // Buscar o profissional pelo nome para obter o ID
+        const baseUrl = getBaseUrl();
+        const searchUrl = `${baseUrl}/api/professionals`;
+
+        const response = await fetch(searchUrl, {
+          headers: {
+            "X-Business-ID": businessIdStr,
+          },
+        });
+
+        if (response.ok) {
+          const professionals = await response.json();
+          const matchedProfessional = professionals.find(
+            (p: any) =>
+              p.name.toLowerCase() === professionalIdToUse?.toLowerCase()
+          );
+
+          if (matchedProfessional) {
+            console.log(
+              `✅ Profissional encontrado: ${matchedProfessional.name}, ID: ${matchedProfessional.id}`
+            );
+            professionalIdToUse = matchedProfessional.id;
+          } else {
+            console.log(
+              `❌ Nenhum profissional encontrado com o nome: ${professionalIdToUse}`
+            );
+            throw new Error(
+              `Profissional não encontrado: ${professionalIdToUse}`
+            );
+          }
+        } else {
+          throw new Error("Falha ao buscar profissionais");
+        }
+      } catch (error) {
+        console.error("Erro ao tentar converter nome para ID:", error);
+        throw new Error(
+          `Erro ao buscar profissional por nome: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      }
     }
 
-    currentSlot.setMinutes(currentSlot.getMinutes() + BUSINESS_HOURS.interval);
-  }
+    // Construir URL para a API de disponibilidade
+    const queryParams = new URLSearchParams();
+    if (professionalIdToUse)
+      queryParams.append("professional_id", professionalIdToUse);
+    if (input.date) queryParams.append("date", input.date);
+    if (input.service_id) queryParams.append("service_id", input.service_id);
 
-  return {
-    json: {
-      available: availableSlots.length > 0,
-      date: input.date,
-      slots: availableSlots,
-      professional: input.professionalId
-        ? {
-            id: professionalIdForAvailability,
-            name: professionalName,
-            availableSlots: availableSlots,
-          }
-        : null,
-      service: input.serviceId
-        ? {
-            id: serviceIdForAvailability,
-            name: serviceName,
-            duration: serviceDuration,
-            suggestions: serviceSuggestions,
-          }
-        : null,
-    },
-  };
+    const baseUrl = getBaseUrl();
+    const url = `${baseUrl}/api/availability?${queryParams.toString()}`;
+
+    console.log(`🔍 Verificando disponibilidade usando URL: ${url}`);
+
+    // Fazer requisição para a API
+    const response = await fetch(url, {
+      headers: {
+        "X-Business-ID": businessIdStr,
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Erro ao verificar disponibilidade: ${errorText}`);
+    }
+
+    const availability = await response.json();
+
+    return {
+      json: availability,
+    };
+  } catch (error) {
+    throw new Error(
+      `Erro ao verificar disponibilidade: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
+  }
 }
 
 export async function handleValidateAppointment(
-  supabase: SupabaseClient,
   businessId: string,
   input: {
-    serviceName: string;
-    professionalName?: string;
+    service_name: string;
+    professional_name?: string;
     date?: string;
     time: string;
-    clientName?: string;
-    clientPhone?: string;
+    client_name?: string;
+    client_phone?: string;
   }
 ) {
-  // Use today's date if not provided
-  const date = input.date || new Date().toISOString().split("T")[0];
+  try {
+    // Garantir que businessId seja uma string
+    const businessIdStr =
+      typeof businessId === "object"
+        ? (businessId as any).id || JSON.stringify(businessId)
+        : String(businessId);
 
-  const validationResults = {
-    service: {
+    const baseUrl = getBaseUrl();
+
+    // Primeiro, vamos validar o serviço usando a API de serviços
+    const serviceQueryParams = new URLSearchParams();
+    serviceQueryParams.append("name", input.service_name);
+
+    const serviceUrl = `${baseUrl}/api/services?${serviceQueryParams.toString()}`;
+
+    const serviceResponse = await fetch(serviceUrl, {
+      headers: {
+        "X-Business-ID": businessIdStr,
+      },
+    });
+
+    if (!serviceResponse.ok) {
+      throw new Error(
+        `Erro ao validar serviço: ${await serviceResponse.text()}`
+      );
+    }
+
+    const services = await serviceResponse.json();
+
+    // Depois, validar o profissional se fornecido
+    let professional = null;
+    if (input.professional_name) {
+      const professionalQueryParams = new URLSearchParams();
+      professionalQueryParams.append("name", input.professional_name);
+
+      const professionalUrl = `${baseUrl}/api/professionals?${professionalQueryParams.toString()}`;
+
+      const professionalResponse = await fetch(professionalUrl, {
+        headers: {
+          "X-Business-ID": businessIdStr,
+        },
+      });
+
+      if (professionalResponse.ok) {
+        const professionals = await professionalResponse.json();
+        if (professionals && professionals.length > 0) {
+          professional = professionals[0];
+        }
+      }
+    }
+
+    // Validar disponibilidade se serviço e profissional forem encontrados
+    const service: { id: string; name: string; duration: number } | null =
+      services.find(
+        (s: any) => s.name.toLowerCase() === input.service_name.toLowerCase()
+      ) || null;
+
+    let availability = { valid: false, availableSlots: [] };
+
+    if (service && professional && input.date) {
+      const availabilityQueryParams = new URLSearchParams();
+      availabilityQueryParams.append("professional_id", professional.id);
+      availabilityQueryParams.append("date", input.date);
+      availabilityQueryParams.append(
+        "service_duration",
+        service.duration.toString()
+      );
+
+      const availabilityUrl = `${baseUrl}/api/availability?${availabilityQueryParams.toString()}`;
+
+      const availabilityResponse = await fetch(availabilityUrl, {
+        headers: {
+          "X-Business-ID": businessIdStr,
+        },
+      });
+
+      if (availabilityResponse.ok) {
+        const availabilityData = await availabilityResponse.json();
+        const availableSlots = availabilityData.available_slots || [];
+        availability = {
+          valid: availableSlots.includes(input.time),
+          availableSlots,
+        };
+      }
+    }
+
+    // Validar cliente se nome ou telefone fornecidos
+    let client: {
+      valid: boolean;
+      data: any;
+      suggestions: any[];
+      multipleMatches: boolean;
+      message: string;
+    } = {
       valid: false,
-      data: null as any,
-      suggestions: [] as any[],
-    },
-    professional: {
-      valid: false,
-      data: null as any,
-      suggestions: [] as any[],
-    },
-    availability: { valid: false, availableSlots: [] as string[] },
-    client: {
-      valid: false,
-      data: null as any,
-      suggestions: [] as any[],
+      data: null,
+      suggestions: [],
       multipleMatches: false,
       message: "",
-    },
-  };
+    };
 
-  let serviceDuration = 30;
+    if (input.client_name || input.client_phone) {
+      const clientQueryParams = new URLSearchParams();
+      if (input.client_name)
+        clientQueryParams.append("name", input.client_name);
+      if (input.client_phone)
+        clientQueryParams.append("phone", input.client_phone);
 
-  // 1. Validate service
-  if (input.serviceName) {
-    const serviceResult = await findServiceByName(
-      supabase,
-      input.serviceName,
-      businessId
-    );
+      const clientUrl = `${baseUrl}/api/clients?${clientQueryParams.toString()}`;
 
-    if (serviceResult.found && serviceResult.service) {
-      validationResults.service.valid = true;
-      validationResults.service.data = serviceResult.service;
-      serviceDuration = serviceResult.service.duration || serviceDuration;
-    } else {
-      validationResults.service.suggestions = serviceResult.suggestions || [];
-    }
-  }
+      const clientResponse = await fetch(clientUrl, {
+        headers: {
+          "X-Business-ID": businessIdStr,
+        },
+      });
 
-  // 2. Validate professional
-  if (input.professionalName) {
-    const professionalData = await findProfessionalByName(
-      supabase,
-      input.professionalName,
-      businessId
-    );
+      if (clientResponse.ok) {
+        const clients = await clientResponse.json();
 
-    if (professionalData) {
-      validationResults.professional.valid = true;
-      validationResults.professional.data = professionalData;
-    } else {
-      const { data: allProfessionals } = await supabase
-        .from("professionals")
-        .select("id, name")
-        .eq("business_id", businessId)
-        .order("name")
-        .limit(5);
-
-      validationResults.professional.suggestions = allProfessionals || [];
-    }
-  }
-
-  // 3. Check availability
-  if (
-    date &&
-    input.time &&
-    validationResults.professional.valid &&
-    validationResults.service.valid
-  ) {
-    const professionalId = validationResults.professional.data?.id;
-
-    if (professionalId) {
-      const { data: existingAppointments } = await supabase
-        .from("appointments")
-        .select("start_time, end_time")
-        .eq("business_id", businessId)
-        .eq("professional_id", professionalId)
-        .gte("start_time", `${date}T00:00:00`)
-        .lt("start_time", `${date}T23:59:59`)
-        .order("start_time");
-
-      const requestedTime = new Date(`${date}T${input.time}`);
-      const requestedEndTime = new Date(
-        requestedTime.getTime() + serviceDuration * 60000
-      );
-
-      if (
-        isWithinBusinessHours(requestedTime, requestedEndTime) &&
-        !hasAppointmentConflict(
-          requestedTime,
-          requestedEndTime,
-          existingAppointments || []
-        )
-      ) {
-        validationResults.availability.valid = true;
-      }
-
-      // Generate available slots for suggestions
-      const { dayStart, dayEnd } = getBusinessDayLimits(date);
-      let currentSlot = new Date(dayStart);
-
-      while (currentSlot < dayEnd) {
-        const slotEnd = new Date(currentSlot);
-        slotEnd.setMinutes(slotEnd.getMinutes() + serviceDuration);
-
-        if (
-          slotEnd <= dayEnd &&
-          !hasAppointmentConflict(
-            currentSlot,
-            slotEnd,
-            existingAppointments || []
-          )
-        ) {
-          validationResults.availability.availableSlots.push(
-            currentSlot.toTimeString().substring(0, 5)
-          );
-        }
-
-        currentSlot.setMinutes(
-          currentSlot.getMinutes() + BUSINESS_HOURS.interval
-        );
-      }
-    }
-  }
-
-  // 4. Check client if name or phone is provided
-  if (input.clientName || input.clientPhone) {
-    // If both name and phone are provided, we can do a more precise check
-    if (input.clientName && input.clientPhone) {
-      // First check by phone as it's more precise
-      const { data: clientByPhone } = await supabase
-        .from("clients")
-        .select("id, name, phone")
-        .eq("phone", input.clientPhone)
-        .eq("business_id", businessId)
-        .single();
-
-      if (clientByPhone) {
-        validationResults.client.valid = true;
-        validationResults.client.data = clientByPhone;
-
-        // Check if the name matches
-        if (
-          clientByPhone.name.toLowerCase() !== input.clientName.toLowerCase()
-        ) {
-          validationResults.client.message = `Cliente encontrado com o telefone ${input.clientPhone}, mas com nome diferente: ${clientByPhone.name}`;
-        } else {
-          validationResults.client.message = `Cliente encontrado: ${clientByPhone.name} (${clientByPhone.phone})`;
-        }
-      } else {
-        // If not found by phone, check by name
-        const clientsByName = await findClientsByName(
-          supabase,
-          input.clientName,
-          businessId
-        );
-
-        if (clientsByName && clientsByName.length > 0) {
-          // If we have multiple matches by name
-          if (clientsByName.length > 1) {
-            validationResults.client.multipleMatches = true;
-            validationResults.client.suggestions = clientsByName;
-
-            // Formatar a lista de clientes com seus telefones
-            const clientOptions = clientsByName
-              .map((c) => `${c.name} (${c.phone})`)
-              .join(" ou ");
-
-            validationResults.client.message = `Encontramos ${clientsByName.length} clientes com nome similar a "${input.clientName}". Temos ${clientOptions}. Qual deles você deseja agendar?`;
+        if (clients && clients.length > 0) {
+          if (clients.length === 1) {
+            client = {
+              valid: true,
+              data: clients[0],
+              suggestions: [],
+              multipleMatches: false,
+              message: `Cliente encontrado: ${clients[0].name} (${clients[0].phone})`,
+            };
           } else {
-            // Single match by name
-            validationResults.client.valid = true;
-            validationResults.client.data = clientsByName[0];
-            validationResults.client.message = `Cliente encontrado: ${clientsByName[0].name} (${clientsByName[0].phone}), mas com telefone diferente do informado.`;
+            client = {
+              valid: false,
+              data: null,
+              suggestions: clients,
+              multipleMatches: true,
+              message: `Encontramos ${clients.length} clientes com dados similares.`,
+            };
           }
         } else {
-          // No client found
-          validationResults.client.message = `Nenhum cliente encontrado com o nome "${input.clientName}" e telefone "${input.clientPhone}". Um novo cliente será criado durante o agendamento.`;
+          client.message =
+            "Nenhum cliente encontrado. Um novo cliente será criado durante o agendamento.";
         }
       }
-    } else if (input.clientName) {
-      // Only name provided
-      const clientsByName = await findClientsByName(
-        supabase,
-        input.clientName,
-        businessId
-      );
+    }
 
-      if (clientsByName && clientsByName.length > 0) {
-        if (clientsByName.length > 1) {
-          validationResults.client.multipleMatches = true;
-          validationResults.client.suggestions = clientsByName;
+    const isFullyValid = service && professional && availability.valid;
 
-          // Formatar a lista de clientes com seus telefones
-          const clientOptions = clientsByName
-            .map((c) => `${c.name} (${c.phone})`)
-            .join(" ou ");
+    let validationMessage =
+      "Não foi possível validar o agendamento. Verifique os detalhes.";
+    if (isFullyValid) {
+      validationMessage = `Agendamento válido para ${service.name} com ${
+        professional.name
+      } em ${input.date || "hoje"} às ${input.time}`;
 
-          validationResults.client.message = `Encontramos ${clientsByName.length} clientes com nome similar a "${input.clientName}". Temos ${clientOptions}. Qual deles você deseja agendar?`;
-        } else {
-          validationResults.client.valid = true;
-          validationResults.client.data = clientsByName[0];
-          validationResults.client.message = `Cliente encontrado: ${clientsByName[0].name} (${clientsByName[0].phone})`;
-        }
-      } else {
-        validationResults.client.message = `Nenhum cliente encontrado com o nome "${input.clientName}". Um novo cliente será criado durante o agendamento.`;
-      }
-    } else if (input.clientPhone) {
-      // Only phone provided
-      const { data: clientByPhone } = await supabase
-        .from("clients")
-        .select("id, name, phone")
-        .eq("phone", input.clientPhone)
-        .eq("business_id", businessId)
-        .single();
-
-      if (clientByPhone) {
-        validationResults.client.valid = true;
-        validationResults.client.data = clientByPhone;
-        validationResults.client.message = `Cliente encontrado: ${clientByPhone.name} (${clientByPhone.phone})`;
-      } else {
-        validationResults.client.message = `Nenhum cliente encontrado com o telefone "${input.clientPhone}". Um novo cliente será criado durante o agendamento.`;
+      if (client.valid && client.data) {
+        validationMessage += ` para ${client.data.name}`;
       }
     }
+
+    return {
+      json: {
+        valid: isFullyValid,
+        service: {
+          valid: !!service,
+          data: service || null,
+          suggestions: services
+            .filter(
+              (s: any) =>
+                s.name.toLowerCase() !== input.service_name.toLowerCase()
+            )
+            .slice(0, 5),
+        },
+        professional: {
+          valid: !!professional,
+          data: professional,
+          suggestions: [],
+        },
+        availability,
+        client,
+        date: input.date || new Date().toISOString().split("T")[0],
+        time: input.time,
+        message: validationMessage,
+      },
+    };
+  } catch (error) {
+    throw new Error(
+      `Erro ao validar agendamento: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
   }
-
-  const isFullyValid =
-    validationResults.service.valid &&
-    validationResults.professional.valid &&
-    validationResults.availability.valid;
-
-  let validationMessage =
-    "Não foi possível validar o agendamento. Verifique os detalhes.";
-  if (
-    isFullyValid &&
-    validationResults.service.data &&
-    validationResults.professional.data
-  ) {
-    validationMessage = `Agendamento válido para ${validationResults.service.data.name} com ${validationResults.professional.data.name} em ${date} às ${input.time}`;
-
-    // Add client information to the message if available
-    if (validationResults.client.valid && validationResults.client.data) {
-      validationMessage += ` para ${validationResults.client.data.name}`;
-    }
-  }
-
-  return {
-    json: {
-      valid: isFullyValid,
-      service: validationResults.service,
-      professional: validationResults.professional,
-      availability: validationResults.availability,
-      client: validationResults.client,
-      date: date,
-      time: input.time,
-      message: validationMessage,
-    },
-  };
-}
-
-// Function to find clients by name
-async function findClientsByName(
-  supabase: SupabaseClient,
-  name: string,
-  businessId: string
-) {
-  const { data, error } = await supabase
-    .from("clients")
-    .select("id, name, phone")
-    .ilike("name", `%${name}%`)
-    .eq("business_id", businessId);
-
-  if (error) {
-    console.error("Error finding clients by name:", error);
-    return null;
-  }
-
-  return data;
 }
 
 export async function handleCreateAppointment(
-  supabase: SupabaseClient,
   businessId: string,
   input: {
-    serviceId: string;
-    professionalId: string;
+    service_id: string;
+    professional_id: string;
     date?: string;
     time: string;
-    clientName: string;
-    clientPhone: string;
+    client_name: string;
+    client_phone: string;
     notes?: string;
   }
 ) {
-  // Use today's date if not provided
-  const date = input.date || new Date().toISOString().split("T")[0];
-
-  let serviceId = input.serviceId;
-  let professionalId = input.professionalId;
-  let serviceName = input.serviceId;
-  let professionalName = input.professionalId;
-  let serviceDuration = 30;
-
-  // Validate service
-  const serviceResult = await findServiceByName(
-    supabase,
-    input.serviceId,
-    businessId
-  );
-
-  // Check if service was found or if there are close matches
-  if (!serviceResult.found || !serviceResult.service) {
-    // If there are suggestions and one exactly matches the input, use that instead
-    const exactMatch = serviceResult.suggestions?.find(
-      (s) => s.name.toLowerCase() === input.serviceId.toLowerCase()
-    );
-
-    if (exactMatch) {
-      serviceId = exactMatch.id;
-      serviceName = exactMatch.name;
-      serviceDuration = exactMatch.duration || serviceDuration;
-    } else {
-      throw new Error(
-        `Serviço não encontrado: ${
-          input.serviceId
-        }. Por favor, escolha entre: ${
-          serviceResult.suggestions?.map((s) => s.name).join(", ") || ""
-        }`
-      );
-    }
-  } else {
-    serviceId = serviceResult.service.id;
-    serviceName = serviceResult.service.name;
-    serviceDuration = serviceResult.service.duration || serviceDuration;
-  }
-
-  // Validate professional
-  const professionalData = await findProfessionalByName(
-    supabase,
-    input.professionalId,
-    businessId
-  );
-  if (!professionalData) {
-    throw new Error(`Profissional não encontrado: ${input.professionalId}`);
-  }
-  professionalId = professionalData.id;
-  professionalName = professionalData.name;
-
-  // Check if client exists by name first
-  const clientsByName = await findClientsByName(
-    supabase,
-    input.clientName,
-    businessId
-  );
-
-  // Check if client exists or create new
-  let clientId;
-  let clientConfirmation = "";
-
-  // If we found multiple clients with the same name, check if any match the phone number
-  if (clientsByName && clientsByName.length > 0) {
-    // Check if any of the clients have the same phone number
-    const exactMatch = clientsByName.find((c) => c.phone === input.clientPhone);
-
-    if (exactMatch) {
-      // We found an exact match by name and phone
-      clientId = exactMatch.id;
-      clientConfirmation = `Cliente existente encontrado: ${exactMatch.name} (${exactMatch.phone})`;
-    } else if (clientsByName.length > 1) {
-      // Multiple clients with the same name but different phones
-      const clientOptions = clientsByName
-        .map((c) => `${c.name} (${c.phone})`)
-        .join(", ");
-      throw new Error(
-        `Encontramos vários clientes com o nome "${input.clientName}". Por favor, confirme qual é o correto: ${clientOptions}`
-      );
-    }
-  }
-
-  // If no client was found by name, check by phone
-  if (!clientId) {
-    const { data: existingClient } = await supabase
-      .from("clients")
-      .select("id, name")
-      .eq("phone", input.clientPhone)
-      .eq("business_id", businessId)
-      .single();
-
-    if (existingClient) {
-      clientId = existingClient.id;
-      // Update the client name if it's different
-      if (existingClient.name !== input.clientName) {
-        await supabase
-          .from("clients")
-          .update({ name: input.clientName })
-          .eq("id", clientId);
-        clientConfirmation = `Cliente atualizado: ${existingClient.name} → ${input.clientName} (${input.clientPhone})`;
-      } else {
-        clientConfirmation = `Cliente existente encontrado: ${existingClient.name} (${input.clientPhone})`;
-      }
-    } else {
-      // Create a new client
-      const { data: newClient, error: clientError } = await supabase
-        .from("clients")
-        .insert({
-          name: input.clientName,
-          phone: input.clientPhone,
-          business_id: businessId,
-        })
-        .select("id")
-        .single();
-
-      if (clientError) {
-        throw new Error(`Erro ao criar cliente: ${clientError.message}`);
-      }
-      clientId = newClient.id;
-      clientConfirmation = `Novo cliente criado: ${input.clientName} (${input.clientPhone})`;
-    }
-  }
-
-  // Calculate appointment times
-  const startTime = new Date(`${date}T${input.time}`);
-  if (isNaN(startTime.getTime())) {
-    throw new Error("Formato de horário inválido. Use o formato HH:mm");
-  }
-
-  const endTime = new Date(startTime.getTime() + serviceDuration * 60000);
-
-  // Validate business hours
-  if (!isWithinBusinessHours(startTime, endTime)) {
-    throw new Error("O horário está fora do horário comercial");
-  }
-
-  // Check for conflicts
-  const { data: existingAppointments, error: conflictError } = await supabase
-    .from("appointments")
-    .select("start_time, end_time")
-    .eq("professional_id", professionalId)
-    .eq("business_id", businessId)
-    .gte("start_time", `${date}T00:00:00`)
-    .lt("start_time", `${date}T23:59:59`);
-
-  if (conflictError) {
-    throw new Error(`Erro ao verificar conflitos: ${conflictError.message}`);
-  }
-
-  // Check for overlapping appointments
-  const hasConflict = existingAppointments?.some((appointment) => {
-    const appointmentStart = new Date(appointment.start_time);
-    const appointmentEnd = new Date(appointment.end_time);
-    return (
-      (startTime < appointmentEnd && endTime > appointmentStart) ||
-      startTime.getTime() === appointmentStart.getTime() ||
-      endTime.getTime() === appointmentEnd.getTime()
-    );
-  });
-
-  if (hasConflict) {
-    throw new Error("Este horário já está ocupado para este profissional");
-  }
-
-  // Create appointment
-  const { data: appointment, error: createError } = await supabase
-    .from("appointments")
-    .insert({
-      business_id: businessId,
-      service_id: serviceId,
-      professional_id: professionalId,
-      client_id: clientId,
-      start_time: startTime.toISOString(),
-      end_time: endTime.toISOString(),
-      status: "scheduled",
-      notes: input.notes || "",
-    })
-    .select("id")
-    .single();
-
-  if (createError) {
-    throw new Error(`Erro ao criar agendamento: ${createError.message}`);
-  }
-
-  // Invalidate caches
   try {
-    invalidateCacheTags([CacheTags.APPOINTMENTS, CacheTags.DASHBOARD]);
-    invalidateSimpleCache(`appointments-${businessId}-phone-`);
-    invalidateSimpleCache(`dashboard-${businessId}-daily`);
-    invalidateSimpleCache(`dashboard-${businessId}-weekly`);
-    invalidateSimpleCache(`dashboard-${businessId}-monthly`);
-  } catch (error) {
-    console.error("Error invalidating cache:", error);
-  }
+    // Garantir que businessId seja uma string
+    const businessIdStr =
+      typeof businessId === "object"
+        ? (businessId as any).id || JSON.stringify(businessId)
+        : String(businessId);
 
-  return {
-    json: {
-      success: true,
-      appointment: {
-        id: appointment.id,
-        serviceId,
-        serviceName,
-        professionalId,
-        professionalName,
-        clientId,
-        date: date,
-        time: input.time,
-        clientName: input.clientName,
-        clientPhone: input.clientPhone,
+    // Verificar e converter serviceId se for um nome em vez de UUID
+    let serviceIdToUse = input.service_id;
+    if (
+      serviceIdToUse &&
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        serviceIdToUse
+      )
+    ) {
+      console.log(
+        `⚠️ Detectado nome de serviço em vez de ID: ${serviceIdToUse}. Tentando converter para ID...`
+      );
+
+      try {
+        const baseUrl = getBaseUrl();
+        const searchUrl = `${baseUrl}/api/services`;
+
+        const response = await fetch(searchUrl, {
+          headers: {
+            "X-Business-ID": businessIdStr,
+          },
+        });
+
+        if (response.ok) {
+          const services = await response.json();
+          const matchedService = services.find(
+            (s: any) => s.name.toLowerCase() === serviceIdToUse.toLowerCase()
+          );
+
+          if (matchedService) {
+            console.log(
+              `✅ Serviço encontrado: ${matchedService.name}, ID: ${matchedService.id}`
+            );
+            serviceIdToUse = matchedService.id;
+          } else {
+            console.log(
+              `❌ Nenhum serviço encontrado com o nome: ${serviceIdToUse}`
+            );
+            throw new Error(`Serviço não encontrado: ${serviceIdToUse}`);
+          }
+        } else {
+          throw new Error("Falha ao buscar serviços");
+        }
+      } catch (error) {
+        console.error(
+          "Erro ao tentar converter nome do serviço para ID:",
+          error
+        );
+        throw new Error(
+          `Erro ao buscar serviço por nome: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      }
+    }
+
+    // Verificar e converter professionalId se for um nome em vez de UUID
+    let professionalIdToUse = input.professional_id;
+    if (
+      professionalIdToUse &&
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        professionalIdToUse
+      )
+    ) {
+      console.log(
+        `⚠️ Detectado nome de profissional em vez de ID: ${professionalIdToUse}. Tentando converter para ID...`
+      );
+
+      try {
+        const baseUrl = getBaseUrl();
+        const searchUrl = `${baseUrl}/api/professionals`;
+
+        const response = await fetch(searchUrl, {
+          headers: {
+            "X-Business-ID": businessIdStr,
+          },
+        });
+
+        if (response.ok) {
+          const professionals = await response.json();
+          const matchedProfessional = professionals.find(
+            (p: any) =>
+              p.name.toLowerCase() === professionalIdToUse.toLowerCase()
+          );
+
+          if (matchedProfessional) {
+            console.log(
+              `✅ Profissional encontrado: ${matchedProfessional.name}, ID: ${matchedProfessional.id}`
+            );
+            professionalIdToUse = matchedProfessional.id;
+          } else {
+            console.log(
+              `❌ Nenhum profissional encontrado com o nome: ${professionalIdToUse}`
+            );
+            throw new Error(
+              `Profissional não encontrado: ${professionalIdToUse}`
+            );
+          }
+        } else {
+          throw new Error("Falha ao buscar profissionais");
+        }
+      } catch (error) {
+        console.error("Erro ao tentar converter nome para ID:", error);
+        throw new Error(
+          `Erro ao buscar profissional por nome: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      }
+    }
+
+    // Validar nome do cliente
+    if (!input.client_name || input.client_name.trim() === "") {
+      throw new Error(
+        "Nome do cliente é obrigatório para criar um agendamento"
+      );
+    }
+
+    if (input.client_name.length < 3) {
+      console.log(`⚠️ Nome do cliente muito curto: ${input.client_name}`);
+      // Não vamos bloquear o agendamento por isso, mas logamos o aviso
+    } else {
+      console.log(`✅ Nome do cliente validado: ${input.client_name}`);
+    }
+
+    // Validar telefone do cliente
+    let clientPhoneToUse = input.client_phone;
+    if (
+      !clientPhoneToUse ||
+      clientPhoneToUse === "Não informado" ||
+      clientPhoneToUse.trim() === ""
+    ) {
+      throw new Error(
+        "Telefone do cliente é obrigatório para criar um agendamento"
+      );
+    }
+
+    // Normalizar o telefone (remover caracteres não numéricos)
+    clientPhoneToUse = clientPhoneToUse.replace(/\D/g, "");
+
+    // Verificar se o telefone tem um número razoável de dígitos
+    if (clientPhoneToUse.length < 10 || clientPhoneToUse.length > 15) {
+      console.log(
+        `⚠️ Formato de telefone potencialmente inválido: ${clientPhoneToUse} (${clientPhoneToUse.length} dígitos)`
+      );
+      // Não vamos bloquear o agendamento por isso, mas logamos o aviso
+    } else {
+      console.log(`✅ Telefone validado: ${clientPhoneToUse}`);
+    }
+
+    // Chamada para a API de agendamentos
+    const baseUrl = getBaseUrl();
+    const url = `${baseUrl}/api/appointments`;
+
+    console.log(
+      `📝 Criando agendamento com: Serviço=${serviceIdToUse}, Profissional=${professionalIdToUse}, Data=${input.date}, Hora=${input.time}`
+    );
+
+    // Preparar dados para o body da requisição
+    const appointmentData = {
+      business_id: businessIdStr,
+      service_id: serviceIdToUse,
+      professional_id: professionalIdToUse,
+      client_name: input.client_name,
+      client_phone: clientPhoneToUse,
+      start_time: `${input.date || new Date().toISOString().split("T")[0]}T${
+        input.time
+      }:00`,
+      notes: input.notes || "",
+    };
+
+    console.log(`📝 Dados para criação de agendamento:`, appointmentData);
+
+    // Enviar requisição POST para a API
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Business-ID": businessIdStr,
       },
-      clientConfirmation,
-    },
-  };
+      body: JSON.stringify(appointmentData),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Erro ao criar agendamento: ${errorText}`);
+    }
+
+    const appointment = await response.json();
+
+    // Invalidar caches
+    try {
+      invalidateCacheTags([CacheTags.APPOINTMENTS, CacheTags.DASHBOARD]);
+      invalidateSimpleCache(`appointments-${businessIdStr}-phone-`);
+      invalidateSimpleCache(`dashboard-${businessIdStr}-daily`);
+      invalidateSimpleCache(`dashboard-${businessIdStr}-weekly`);
+      invalidateSimpleCache(`dashboard-${businessIdStr}-monthly`);
+    } catch (error) {
+      console.error("Error invalidating cache:", error);
+    }
+
+    return {
+      json: {
+        success: true,
+        appointment: {
+          id: appointment.id,
+          serviceId: appointment.service_id,
+          serviceName: appointment.services?.name || input.service_id,
+          professionalId: appointment.professional_id,
+          professionalName:
+            appointment.professionals?.name || input.professional_id,
+          clientId: appointment.client_id,
+          date: input.date || new Date().toISOString().split("T")[0],
+          time: input.time,
+          clientName: input.client_name,
+          clientPhone: clientPhoneToUse,
+        },
+        clientConfirmation: "Cliente processado com sucesso",
+      },
+    };
+  } catch (error) {
+    throw new Error(
+      `Erro ao criar agendamento: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
+  }
 }
 
 export async function handleToolCalls(
   toolUse: ToolUse,
-  supabase: SupabaseClient,
   businessId: string
 ): Promise<ToolResult> {
   const { name, input, toolUseId } = toolUse;
 
   try {
-    console.log(`🔧 Tool chamada: ${name}`, { input });
+    // Garantir que businessId seja uma string
+    const businessIdStr =
+      typeof businessId === "object"
+        ? (businessId as any).id || JSON.stringify(businessId)
+        : String(businessId);
+
+    console.log(`🔧 Tool chamada: ${name}`, {
+      input,
+      businessId: businessIdStr,
+    });
 
     let content;
 
     switch (name) {
       case "listServices":
-        content = await handleListServices(supabase, businessId);
+        content = await handleListServices(businessId);
         break;
 
       case "listProfessionals":
-        content = await handleListProfessionals(supabase, businessId);
+        content = await handleListProfessionals(businessId);
         break;
 
       case "checkAvailability":
-        content = await handleCheckAvailability(supabase, businessId, input);
+        content = await handleCheckAvailability(businessId, input);
         break;
 
       case "validateAppointment":
-        content = await handleValidateAppointment(supabase, businessId, input);
+        content = await handleValidateAppointment(businessId, input);
         break;
 
       case "createAppointment":
-        content = await handleCreateAppointment(supabase, businessId, input);
+        content = await handleCreateAppointment(businessId, input);
         break;
 
       default:

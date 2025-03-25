@@ -122,7 +122,7 @@ export class WhatsAppService {
 
       return { success: true, error: null };
     } catch (error) {
-      console.error("Error sending WhatsApp message:", error);
+      console.error("Error sending WhatsApp message:");
       return {
         success: false,
         error: error instanceof Error ? error.message : "Unknown error",

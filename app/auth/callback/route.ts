@@ -3,11 +3,23 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
 export async function GET(request: Request) {
-  const requestUrl = new URL(request.url);
-  const code = requestUrl.searchParams.get("code");
-  const origin = requestUrl.origin;
+  try {
+    const requestUrl = new URL(request.url);
+    const code = requestUrl.searchParams.get("code");
+    const origin = requestUrl.origin;
+    const host = requestUrl.hostname;
 
-  if (code) {
+    const localOrigin = requestUrl.searchParams.get("local_origin");
+    const targetDomain = requestUrl.searchParams.get("target_domain");
+    const source = requestUrl.searchParams.get("source");
+
+    const isProdCallback =
+      host.includes("gendaia.com.br") || host.includes("gendaia.vercel.app");
+
+    if (!code) {
+      return NextResponse.redirect(new URL("/login?error=no_code", origin));
+    }
+
     const cookieStore = cookies();
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -22,28 +34,46 @@ export async function GET(request: Request) {
               cookiesToSet.forEach(({ name, value, options }) =>
                 cookieStore.set(name, value, options)
               );
-            } catch {
-              // The `setAll` method was called from a Server Component.
-              // This can be ignored if you have middleware refreshing
-              // user sessions.
+            } catch (err) {
+              // Erro ao definir cookies - pode ser ignorado se o middleware estiver atualizando as sessões
             }
           },
         },
       }
     );
 
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
-    if (!error) {
-      // Add a small delay to ensure cookies are properly set
-      await new Promise((resolve) => setTimeout(resolve, 3000));
+    // Tentando trocar o código por uma sessão
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
-      const redirectUrl = new URL("/dashboard/calendar", origin);
-      return NextResponse.redirect(redirectUrl);
+    if (error) {
+      return NextResponse.redirect(
+        new URL(`/login?error=${error.message}`, origin)
+      );
     }
-  }
 
-  // Return the user to an error page with instructions
-  const errorUrl = new URL("/login", origin);
-  errorUrl.searchParams.set("error", "auth");
-  return NextResponse.redirect(errorUrl);
+    // Decide a URL base para redirecionamento com base nas condições:
+    let baseUrl;
+
+    // Priorizar o parâmetro de URL local_origin se ele existir (ambiente local)
+    if (localOrigin && (source === "localhost" || targetDomain === "local")) {
+      baseUrl = localOrigin;
+    }
+    // Se não tiver localOrigin mas estiver no ambiente de produção
+    else if (isProdCallback) {
+      baseUrl = "https://www.gendaia.com.br"; // Use seu domínio principal
+    }
+    // Caso contrário, use a origem da requisição
+    else {
+      baseUrl = origin;
+    }
+
+    // Redirecionando para o dashboard usando a URL base determinada
+    const redirectUrl = new URL("/dashboard/calendar", baseUrl);
+
+    return NextResponse.redirect(redirectUrl);
+  } catch (err) {
+    return NextResponse.redirect(
+      new URL("/login?error=callback_error", new URL(request.url).origin)
+    );
+  }
 }
