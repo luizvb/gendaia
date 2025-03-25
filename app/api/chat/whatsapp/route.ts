@@ -444,26 +444,196 @@ export async function POST(req: Request) {
           })),
         };
 
-        // Recursively call the API with tool results, but manage history size
-        // Keep only the most recent messages to prevent the request from growing too large
+        // INSTEAD - Create a new messages array and call Bedrock directly
         const newMessages = trimMessageHistory([
           ...processedMessages,
           response.output?.message,
           toolResultMessage,
         ]);
 
-        const newReq = new Request(req.url, {
-          method: "POST",
-          headers: req.headers,
-          body: JSON.stringify({
-            messages: newMessages,
-            phone_number,
-            client_name,
-            client_phone,
-          }),
+        // Call Bedrock again with updated messages
+        const followUpCommand = new ConverseCommand({
+          modelId: "anthropic.claude-3-sonnet-20240229-v1:0",
+          messages: newMessages.map((m: any) => ({
+            role: m.role,
+            content: Array.isArray(m.content)
+              ? m.content
+              : [{ text: m.content }],
+          })),
+          system: [
+            {
+              text:
+                SYSTEM_PROMPT +
+                `\n\n Dados do cliente atual: Nome: ${client_name} - Telefone: ${client_phone}`,
+            },
+          ],
+          toolConfig: {
+            tools: [
+              {
+                toolSpec: {
+                  name: "listServices",
+                  description: "Lista todos os serviços disponíveis",
+                  inputSchema: {
+                    json: {
+                      type: "object",
+                      properties: {},
+                      additionalProperties: false,
+                    },
+                  },
+                },
+              },
+              {
+                toolSpec: {
+                  name: "listProfessionals",
+                  description:
+                    "Lista todos os profissionais disponíveis para um serviço",
+                  inputSchema: {
+                    json: {
+                      type: "object",
+                      properties: {},
+                      additionalProperties: false,
+                    },
+                  },
+                },
+              },
+              {
+                toolSpec: {
+                  name: "checkAvailability",
+                  description:
+                    "Verifica disponibilidade de horários para um profissional em uma data",
+                  inputSchema: {
+                    json: {
+                      type: "object",
+                      properties: {
+                        professional_id: {
+                          type: "string",
+                          description: "ID ou nome do profissional",
+                        },
+                        date: {
+                          type: "string",
+                          description: "Data no formato YYYY-MM-DD",
+                        },
+                        service_id: {
+                          type: "string",
+                          description: "ID ou nome do serviço (opcional)",
+                        },
+                      },
+                      required: ["professional_id", "date"],
+                      additionalProperties: false,
+                    },
+                  },
+                },
+              },
+              {
+                toolSpec: {
+                  name: "validateAppointment",
+                  description:
+                    "Valida todos os dados de um agendamento: serviço, profissional, disponibilidade e cliente",
+                  inputSchema: {
+                    json: {
+                      type: "object",
+                      properties: {
+                        service_name: {
+                          type: "string",
+                          description: "Nome do serviço desejado",
+                        },
+                        professional_name: {
+                          type: "string",
+                          description: "Nome do profissional desejado",
+                        },
+                        date: {
+                          type: "string",
+                          description: "Data no formato YYYY-MM-DD",
+                        },
+                        time: {
+                          type: "string",
+                          description: "Horário no formato HH:MM",
+                        },
+                        client_name: {
+                          type: "string",
+                          description: "Nome do cliente",
+                        },
+                        client_phone: {
+                          type: "string",
+                          description: "Telefone do cliente",
+                        },
+                      },
+                      required: ["service_name", "time"],
+                      additionalProperties: false,
+                    },
+                  },
+                },
+              },
+              {
+                toolSpec: {
+                  name: "createAppointment",
+                  description: "Cria um novo agendamento",
+                  inputSchema: {
+                    json: {
+                      type: "object",
+                      properties: {
+                        service_id: {
+                          type: "string",
+                          description: "ID ou nome do serviço",
+                        },
+                        professional_id: {
+                          type: "string",
+                          description: "ID ou nome do profissional",
+                        },
+                        date: {
+                          type: "string",
+                          description: "Data no formato YYYY-MM-DD",
+                        },
+                        time: {
+                          type: "string",
+                          description: "Horário no formato HH:MM",
+                        },
+                        client_name: {
+                          type: "string",
+                          description: "Nome do cliente",
+                        },
+                        client_phone: {
+                          type: "string",
+                          description: "Telefone do cliente",
+                        },
+                        notes: {
+                          type: "string",
+                          description: "Observações (opcional)",
+                        },
+                      },
+                      required: [
+                        "service_id",
+                        "professional_id",
+                        "time",
+                        "client_name",
+                        "client_phone",
+                      ],
+                      additionalProperties: false,
+                    },
+                  },
+                },
+              },
+            ],
+          },
+          inferenceConfig: {
+            maxTokens: 1024,
+            temperature: 0.1,
+            topP: 0.2,
+          },
         });
 
-        return await POST(newReq);
+        const followUpResponse = await bedrock.send(followUpCommand);
+
+        // Extract text from follow-up response
+        const followUpText =
+          followUpResponse.output?.message?.content?.[0]?.text;
+        if (!followUpText) {
+          throw new Error(
+            "No completion received from Bedrock in follow-up request"
+          );
+        }
+
+        return NextResponse.json({ completion: followUpText });
       }
     }
 
