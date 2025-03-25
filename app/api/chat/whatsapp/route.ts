@@ -221,7 +221,7 @@ export async function POST(req: Request) {
 
     const { data: businesses, error: businessError } = await supabase
       .from("businesses")
-      .select("id, phone")
+      .select("id, phone, name, description ")
       .ilike("phone", `%${phone_number}%`);
 
     console.log("Query result:", { businesses, error: businessError });
@@ -249,7 +249,7 @@ export async function POST(req: Request) {
         {
           text:
             SYSTEM_PROMPT +
-            `\n\n Dados do cliente atual: Nome: ${client_name} - Telefone: ${client_phone}`,
+            `\n\n Sobre a empresa atual: ${businesses[0].name} - ${businesses[0].description}. Dados do cliente atual: Nome: ${client_name} - Telefone: ${client_phone}`,
         },
       ],
       toolConfig: {
