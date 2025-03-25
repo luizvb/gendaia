@@ -30,9 +30,10 @@ Minha personalidade:
 Você deve:
 1. Guiar o usuário pelo processo de agendamento
 2. Verificar disponibilidade antes de confirmar
+3. Se o nome do cliente foi informado, chame ele pelo nome
 
 Ao interagir:
-- Colete informações necessárias: nome, telefone, serviço, data/hora, preferência de profissional
+- Colete informações necessárias: nome (já informado nome do cliente) telefone (já informado telefone do cliente), serviço, data/hora, preferência de profissional
 - Confirme disponibilidade usando as ferramentas fornecidas
 - Peça confirmação antes de finalizar agendamento
 - IMPORTANTE: Se o nome e telefone do cliente não foram informados, SEMPRE pergunte essas informações ANTES de tentar validar ou criar o agendamento
@@ -41,6 +42,8 @@ IMPORTANTE:
 - Para checkAvailability, validateAppointment e createAppointment, o sistema consegue converter automaticamente nomes para IDs
 - Mas SEMPRE é preferível e mais eficiente usar UUIDs/IDs quando disponíveis
 - Recomendado: Use listProfessionals/listServices primeiro para obter os IDs
+- NUNCA invente nomes de serviços ou profissionais! Use APENAS nomes ou IDs exatos retornados por listServices e listProfessionals
+- SEMPRE use o ID exato ou o nome exato retornado pela API, sem modificações ou abreviações
 
 ANO, MES e DIA ATUAL:
 - ANO: ${new Date().getFullYear()}
@@ -70,11 +73,6 @@ Fluxo de agendamento OBRIGATÓRIO (sempre siga essas etapas em ordem):
 ATENÇÃO: validateAppointment e createAppointment são duas etapas DISTINTAS e SEPARADAS:
 - validateAppointment apenas VERIFICA se os dados estão corretos, mas NÃO CRIA o agendamento
 - createAppointment CRIA o agendamento definitivo e deve ser chamado APENAS após a confirmação explícita do cliente
-
-ATENDIMENTO AO CLIENTE:
-- SEMPRE pergunte o nome e telefone para contato do cliente antes de validar o agendamento
-- Esses dados são OBRIGATÓRIOS para criar o agendamento no sistema
-- Se o cliente não fornecer espontaneamente, pergunte educadamente: "Para confirmar seu agendamento, preciso do seu nome e telefone para contato. Poderia me informar?"
 
 GUIA DE FERRAMENTAS COM EXEMPLOS:
 
@@ -126,6 +124,7 @@ GUIA DE FERRAMENTAS COM EXEMPLOS:
    Descrição: Cria um novo agendamento
    Quando usar: APENAS após validar todas as informações com validateAppointment E obter confirmação explícita do cliente
    IMPORTANTE: Esta ferramenta CRIA de fato o agendamento no sistema
+   ATENÇÃO: NUNCA invente nomes de serviços! Use APENAS os IDs ou nomes EXATOS retornados por listServices
    Exemplo de uso:
    - Usuário: "Sim, pode confirmar o agendamento"
    - Ação: Use createAppointment com service_id (UUID), professional_id (UUID), date="${
@@ -186,9 +185,31 @@ export async function POST(req: Request) {
     let { messages, phone_number, client_name, client_phone } =
       await req.json();
 
+    console.log("cliente:", client_name, client_phone);
+
     if (!phone_number) {
       return NextResponse.json(
         { error: "Phone number is required" },
+        { status: 400 }
+      );
+    }
+
+    // Trim message history to prevent large requests
+    const trimmedMessages = trimMessageHistory(messages);
+
+    // Ensure the first message is from a user
+    let processedMessages = [...trimmedMessages];
+    if (
+      processedMessages.length > 0 &&
+      processedMessages[0].role === "assistant"
+    ) {
+      processedMessages = processedMessages.slice(1);
+    }
+
+    // If there are no messages left after filtering, return an error
+    if (processedMessages.length === 0) {
+      return NextResponse.json(
+        { error: "No valid user messages in the conversation" },
         { status: 400 }
       );
     }
@@ -198,8 +219,6 @@ export async function POST(req: Request) {
     phone_number = phone_number.replace("@c.us", "");
     console.log("Searching for phone number:", phone_number);
 
-    // remove @c.us from phone_number
-    // Get business by phone number - with debug
     const { data: businesses, error: businessError } = await supabase
       .from("businesses")
       .select("id, phone")
@@ -220,30 +239,17 @@ export async function POST(req: Request) {
 
     const businessId = businesses[0].id;
 
-    console.log("messages", messages);
-
-    // Trim message history to prevent large requests
-    const trimmedMessages = trimMessageHistory(messages);
-
-    console.log(
-      "Messages",
-      JSON.stringify(
-        trimmedMessages.map((m: any) => ({
-          role: m.role,
-          content: Array.isArray(m.content) ? m.content : [{ text: m.content }],
-        }))
-      )
-    );
-
     const command = new ConverseCommand({
       modelId: "anthropic.claude-3-sonnet-20240229-v1:0",
-      messages: trimmedMessages.map((m: any) => ({
+      messages: processedMessages.map((m: any) => ({
         role: m.role,
         content: Array.isArray(m.content) ? m.content : [{ text: m.content }],
       })),
       system: [
         {
-          text: SYSTEM_PROMPT + `\n\nCliente: ${client_name} - ${client_phone}`,
+          text:
+            SYSTEM_PROMPT +
+            `\n\n Dados do cliente atual: Nome: ${client_name} - Telefone: ${client_phone}`,
         },
       ],
       toolConfig: {
@@ -297,7 +303,7 @@ export async function POST(req: Request) {
                       description: "ID ou nome do serviço (opcional)",
                     },
                   },
-                  required: ["date"],
+                  required: ["professional_id", "date"],
                   additionalProperties: false,
                 },
               },
@@ -396,7 +402,7 @@ export async function POST(req: Request) {
       },
       inferenceConfig: {
         maxTokens: 1024,
-        temperature: 0,
+        temperature: 0.1,
         topP: 0.2,
       },
     });
@@ -441,7 +447,7 @@ export async function POST(req: Request) {
         // Recursively call the API with tool results, but manage history size
         // Keep only the most recent messages to prevent the request from growing too large
         const newMessages = trimMessageHistory([
-          ...trimmedMessages,
+          ...processedMessages,
           response.output?.message,
           toolResultMessage,
         ]);
