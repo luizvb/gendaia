@@ -57,19 +57,41 @@ export function AuthForm({ view }: { view: "sign-in" | "sign-up" }) {
 
   const handleGoogleSignIn = async () => {
     try {
+      const isLocal =
+        window.location.hostname === "localhost" ||
+        window.location.hostname === "127.0.0.1";
+
+      // Use o window.location.origin para capturar o ambiente atual
+      const callbackUrl = `${window.location.origin}/auth/callback`;
+
+      // Adicionar parâmetros para forçar retorno ao ambiente local
+      const queryParams: Record<string, string> = {};
+
+      // Adicionar o origin local apenas se estivermos em ambiente local
+      if (isLocal) {
+        queryParams.local_origin = window.location.origin;
+        queryParams.source = "localhost";
+        queryParams.target_domain = "local";
+      }
+
+      // Configurar as opções
+      const options = {
+        redirectTo: callbackUrl,
+        queryParams:
+          Object.keys(queryParams).length > 0 ? queryParams : undefined,
+      };
+
+      // Chamada para o Supabase
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
-        options: {
-          redirectTo: `${window.location.origin}/auth/callback`, // This will redirect to /dashboard/calendar after auth
-        },
+        options,
       });
 
       if (error) {
         setError(error.message);
       }
-    } catch (error) {
+    } catch (error: any) {
       setError("Ocorreu um erro ao fazer login com Google. Tente novamente.");
-      console.error(error);
     }
   };
 
