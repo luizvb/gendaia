@@ -4,6 +4,7 @@ import type { Database } from "@/types/supabase";
 
 export async function middleware(request: NextRequest) {
   try {
+    console.log("middlewareeeeeeeee");
     // Check for subdomain
     const hostname = request.headers.get("host") || "";
     const isSubdomain = hostname.includes(".") && !hostname.startsWith("www.");
@@ -96,7 +97,8 @@ export async function middleware(request: NextRequest) {
         if (
           profile?.business_id &&
           request.nextUrl.pathname.startsWith("/api") &&
-          !isBusinessApiRoute
+          !isBusinessApiRoute &&
+          !request.nextUrl.pathname.startsWith("/api/chat/whatsapp")
         ) {
           const requestWithBusinessId = new Request(request.url, {
             headers: new Headers(request.headers),
