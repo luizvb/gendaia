@@ -183,6 +183,7 @@ function trimMessageHistory(messages: any[]) {
 export async function POST(req: Request) {
   try {
     let body;
+    console.log("req CHAT WHATSAPP", req);
     try {
       body = await req.json();
     } catch (jsonError: any) {
