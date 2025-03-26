@@ -182,8 +182,24 @@ function trimMessageHistory(messages: any[]) {
 
 export async function POST(req: Request) {
   try {
-    let { messages, phone_number, client_name, client_phone } =
-      await req.json();
+    let body;
+    try {
+      body = await req.json();
+    } catch (jsonError: any) {
+      console.error("JSON parsing error:", jsonError);
+      return NextResponse.json(
+        { error: "Invalid JSON in request body", details: jsonError.message },
+        { status: 400 }
+      );
+    }
+
+    let {
+      phone_number,
+      client_name,
+      client_phone,
+      message_text,
+      is_tool_call_response,
+    } = body || {};
 
     console.log("cliente:", client_name, client_phone);
 
@@ -194,31 +210,12 @@ export async function POST(req: Request) {
       );
     }
 
-    // Trim message history to prevent large requests
-    const trimmedMessages = trimMessageHistory(messages);
-
-    // Ensure the first message is from a user
-    let processedMessages = [...trimmedMessages];
-    if (
-      processedMessages.length > 0 &&
-      processedMessages[0].role === "assistant"
-    ) {
-      processedMessages = processedMessages.slice(1);
-    }
-
-    // If there are no messages left after filtering, return an error
-    if (processedMessages.length === 0) {
-      return NextResponse.json(
-        { error: "No valid user messages in the conversation" },
-        { status: 400 }
-      );
-    }
-
     const supabase = await createClient();
 
     phone_number = phone_number.replace("@c.us", "");
     console.log("Searching for phone number:", phone_number);
 
+    // Find business based on phone number
     const { data: businesses, error: businessError } = await supabase
       .from("businesses")
       .select("id, phone, name, description ")
@@ -239,12 +236,107 @@ export async function POST(req: Request) {
 
     const businessId = businesses[0].id;
 
+    // Fetch message history from the whatsapp_messages table
+    const { data: whatsappMessages, error: messagesError } = await supabase
+      .from("whatsapp_messages")
+      .select("message, direction, created_at")
+      .eq("phone_number", client_phone)
+      .eq("business_id", businessId)
+      .order("created_at", { ascending: false })
+      .limit(MAX_MESSAGE_HISTORY);
+
+    if (messagesError) {
+      console.error("Error fetching messages:", messagesError);
+      return NextResponse.json(
+        {
+          error: "Failed to fetch message history",
+          details: messagesError.message,
+        },
+        { status: 500 }
+      );
+    }
+
+    // Create the messages array from whatsapp_messages
+    let processedMessages = whatsappMessages
+      .map((msg) => ({
+        role: msg.direction === "outbound" ? "assistant" : "user",
+        content: msg.message,
+      }))
+      .reverse();
+
+    // Add the latest message from the user if provided
+    if (message_text) {
+      // If this is a tool call response, don't save to database and format correctly
+      if (is_tool_call_response) {
+        try {
+          const toolContent = JSON.parse(message_text);
+          processedMessages.push({
+            role: "user",
+            content: toolContent,
+          });
+        } catch (error) {
+          console.error("Error parsing tool call response:", error);
+          // Fallback to treating it as a regular message
+          processedMessages.push({
+            role: "user",
+            content: message_text,
+          });
+        }
+      } else {
+        // Regular user message - save to database
+        const userMessageToSave = {
+          business_id: businessId,
+          phone_number: client_phone,
+          direction: "inbound",
+          message: message_text,
+          created_at: new Date().toISOString(),
+        };
+
+        await supabase.from("whatsapp_messages").insert(userMessageToSave);
+
+        processedMessages.push({
+          role: "user",
+          content: message_text,
+        });
+      }
+    }
+
+    // Trim message history to prevent large requests
+    processedMessages = trimMessageHistory(processedMessages);
+
+    // Ensure the first message is from a user
+    if (
+      processedMessages.length > 0 &&
+      processedMessages[0].role === "assistant"
+    ) {
+      processedMessages = processedMessages.slice(1);
+    }
+
+    // If there are no messages left after filtering, return an error
+    if (processedMessages.length === 0) {
+      return NextResponse.json(
+        { error: "No valid user messages in the conversation" },
+        { status: 400 }
+      );
+    }
+
     const command = new ConverseCommand({
       modelId: "anthropic.claude-3-sonnet-20240229-v1:0",
-      messages: processedMessages.map((m: any) => ({
-        role: m.role,
-        content: Array.isArray(m.content) ? m.content : [{ text: m.content }],
-      })),
+      messages: processedMessages.map((m: any) => {
+        // Se o conteúdo já for um array, assumimos que é um toolResult
+        if (Array.isArray(m.content)) {
+          return {
+            role: m.role,
+            content: m.content,
+          };
+        }
+
+        // Caso contrário, é uma mensagem de texto normal
+        return {
+          role: m.role,
+          content: [{ text: m.content }],
+        };
+      }),
       system: [
         {
           text:
@@ -407,7 +499,19 @@ export async function POST(req: Request) {
       },
     });
 
-    const response = await bedrock.send(command);
+    let response;
+    try {
+      response = await bedrock.send(command);
+    } catch (bedrockError: any) {
+      console.error("Bedrock API error:", bedrockError);
+      return NextResponse.json(
+        {
+          error: "Failed to communicate with AI model",
+          message: bedrockError.message,
+        },
+        { status: 502 }
+      );
+    }
 
     if (response.stopReason === "tool_use") {
       const toolUses = response.output?.message?.content
@@ -444,26 +548,233 @@ export async function POST(req: Request) {
           })),
         };
 
-        // Recursively call the API with tool results, but manage history size
-        // Keep only the most recent messages to prevent the request from growing too large
-        const newMessages = trimMessageHistory([
-          ...processedMessages,
-          response.output?.message,
-          toolResultMessage,
-        ]);
+        // Salvar a mensagem da IA no banco de dados
+        const assistantMessageToSave = {
+          business_id: businessId,
+          phone_number: client_phone,
+          direction: "outbound",
+          message: response.output?.message?.content?.[0]?.text || "Tool use",
+          created_at: new Date().toISOString(),
+        };
 
-        const newReq = new Request(req.url, {
-          method: "POST",
-          headers: req.headers,
-          body: JSON.stringify({
-            messages: newMessages,
-            phone_number,
-            client_name,
-            client_phone,
-          }),
+        await supabase.from("whatsapp_messages").insert(assistantMessageToSave);
+
+        // Vamos criar uma nova sequência de mensagens que inclui as mensagens
+        // originais, a resposta da IA e o resultado da ferramenta
+        const updatedMessages = [
+          ...processedMessages.map((m: any) => ({
+            role: m.role as "user" | "assistant",
+            content: Array.isArray(m.content)
+              ? m.content
+              : [{ text: m.content }],
+          })),
+          {
+            role: "assistant" as const,
+            content: response.output?.message?.content || [],
+          },
+          {
+            role: "user" as const,
+            content: toolResultMessage.content,
+          },
+        ];
+
+        // Criar uma nova chamada com as mensagens atualizadas
+        const command = new ConverseCommand({
+          modelId: "anthropic.claude-3-sonnet-20240229-v1:0",
+          messages: updatedMessages,
+          system: [
+            {
+              text:
+                SYSTEM_PROMPT +
+                `\n\n Sobre a empresa atual: ${businesses[0].name} - ${businesses[0].description}. Dados do cliente atual: Nome: ${client_name} - Telefone: ${client_phone}`,
+            },
+          ],
+          toolConfig: {
+            tools: [
+              {
+                toolSpec: {
+                  name: "listServices",
+                  description: "Lista todos os serviços disponíveis",
+                  inputSchema: {
+                    json: {
+                      type: "object",
+                      properties: {},
+                      additionalProperties: false,
+                    },
+                  },
+                },
+              },
+              {
+                toolSpec: {
+                  name: "listProfessionals",
+                  description:
+                    "Lista todos os profissionais disponíveis para um serviço",
+                  inputSchema: {
+                    json: {
+                      type: "object",
+                      properties: {},
+                      additionalProperties: false,
+                    },
+                  },
+                },
+              },
+              {
+                toolSpec: {
+                  name: "checkAvailability",
+                  description:
+                    "Verifica disponibilidade de horários para um profissional em uma data",
+                  inputSchema: {
+                    json: {
+                      type: "object",
+                      properties: {
+                        professional_id: {
+                          type: "string",
+                          description: "ID ou nome do profissional",
+                        },
+                        date: {
+                          type: "string",
+                          description: "Data no formato YYYY-MM-DD",
+                        },
+                        service_id: {
+                          type: "string",
+                          description: "ID ou nome do serviço (opcional)",
+                        },
+                      },
+                      required: ["professional_id", "date"],
+                      additionalProperties: false,
+                    },
+                  },
+                },
+              },
+              {
+                toolSpec: {
+                  name: "validateAppointment",
+                  description:
+                    "Valida todos os dados de um agendamento: serviço, profissional, disponibilidade e cliente",
+                  inputSchema: {
+                    json: {
+                      type: "object",
+                      properties: {
+                        service_name: {
+                          type: "string",
+                          description: "Nome do serviço desejado",
+                        },
+                        professional_name: {
+                          type: "string",
+                          description: "Nome do profissional desejado",
+                        },
+                        date: {
+                          type: "string",
+                          description: "Data no formato YYYY-MM-DD",
+                        },
+                        time: {
+                          type: "string",
+                          description: "Horário no formato HH:MM",
+                        },
+                        client_name: {
+                          type: "string",
+                          description: "Nome do cliente",
+                        },
+                        client_phone: {
+                          type: "string",
+                          description: "Telefone do cliente",
+                        },
+                      },
+                      required: ["service_name", "time"],
+                      additionalProperties: false,
+                    },
+                  },
+                },
+              },
+              {
+                toolSpec: {
+                  name: "createAppointment",
+                  description: "Cria um novo agendamento",
+                  inputSchema: {
+                    json: {
+                      type: "object",
+                      properties: {
+                        service_id: {
+                          type: "string",
+                          description: "ID ou nome do serviço",
+                        },
+                        professional_id: {
+                          type: "string",
+                          description: "ID ou nome do profissional",
+                        },
+                        date: {
+                          type: "string",
+                          description: "Data no formato YYYY-MM-DD",
+                        },
+                        time: {
+                          type: "string",
+                          description: "Horário no formato HH:MM",
+                        },
+                        client_name: {
+                          type: "string",
+                          description: "Nome do cliente",
+                        },
+                        client_phone: {
+                          type: "string",
+                          description: "Telefone do cliente",
+                        },
+                        notes: {
+                          type: "string",
+                          description: "Observações (opcional)",
+                        },
+                      },
+                      required: [
+                        "service_id",
+                        "professional_id",
+                        "time",
+                        "client_name",
+                        "client_phone",
+                      ],
+                      additionalProperties: false,
+                    },
+                  },
+                },
+              },
+            ],
+          },
+          inferenceConfig: {
+            maxTokens: 1024,
+            temperature: 0.1,
+            topP: 0.2,
+          },
         });
 
-        return await POST(newReq);
+        let toolResponse;
+        try {
+          toolResponse = await bedrock.send(command);
+        } catch (bedrockError: any) {
+          console.error("Bedrock API error in tool handling:", bedrockError);
+          return NextResponse.json(
+            {
+              error: "Failed to communicate with AI model during tool handling",
+              message: bedrockError.message,
+            },
+            { status: 502 }
+          );
+        }
+
+        const toolText = toolResponse.output?.message?.content?.[0]?.text;
+        if (!toolText) {
+          throw new Error("No completion received from Bedrock after tool use");
+        }
+
+        // Salvar a resposta final no banco de dados
+        const finalMessageToSave = {
+          business_id: businessId,
+          phone_number: client_phone,
+          direction: "outbound",
+          message: toolText,
+          created_at: new Date().toISOString(),
+        };
+
+        await supabase.from("whatsapp_messages").insert(finalMessageToSave);
+
+        return NextResponse.json({ completion: toolText });
       }
     }
 
@@ -472,11 +783,26 @@ export async function POST(req: Request) {
       throw new Error("No completion received from Bedrock");
     }
 
+    // Save the assistant's response to the database
+    const assistantMessageToSave = {
+      business_id: businessId,
+      phone_number: client_phone,
+      direction: "outbound",
+      message: text,
+      created_at: new Date().toISOString(),
+    };
+
+    await supabase.from("whatsapp_messages").insert(assistantMessageToSave);
+
     return NextResponse.json({ completion: text });
-  } catch (error) {
+  } catch (error: any) {
     console.error("WhatsApp chat error:", error);
     return NextResponse.json(
-      { error: "Failed to process WhatsApp chat request" },
+      {
+        error: "Failed to process WhatsApp chat request",
+        message: error.message,
+        stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
+      },
       { status: 500 }
     );
   }
