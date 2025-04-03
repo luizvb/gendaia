@@ -75,6 +75,8 @@ export async function POST(request: NextRequest) {
         appointment_confirmation: body.appointment_confirmation !== false,
         appointment_reminder: !!body.appointment_reminder,
         follow_up_message: !!body.follow_up_message,
+        appointment_update: body.appointment_update !== false,
+        appointment_cancellation: body.appointment_cancellation !== false,
       }
     );
 

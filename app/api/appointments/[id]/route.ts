@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { NotificationService } from "@/lib/services/notification-service";
 
 export async function GET(
   request: Request,
@@ -84,6 +85,21 @@ export async function PUT(
     const id = params.id;
     const body = await request.json();
 
+    // Get the current appointment data for notification
+    const { data: currentAppointment } = await supabase
+      .from("appointments")
+      .select("*")
+      .eq("id", id)
+      .eq("business_id", businessId)
+      .single();
+
+    if (!currentAppointment) {
+      return NextResponse.json(
+        { error: "Agendamento não encontrado" },
+        { status: 404 }
+      );
+    }
+
     const { data, error } = await supabase
       .from("appointments")
       .update({
@@ -108,6 +124,37 @@ export async function PUT(
       return NextResponse.json(
         { error: "Agendamento não encontrado" },
         { status: 404 }
+      );
+    }
+
+    // Send WhatsApp notification if enabled
+    try {
+      const notificationService = new NotificationService();
+
+      // Get notification preferences
+      const preferences = await notificationService.getNotificationPreferences(
+        businessId
+      );
+
+      // Send update notification if enabled and there are changes that affect the client
+      if (
+        preferences &&
+        preferences.appointment_update &&
+        data &&
+        data.length > 0
+      ) {
+        // Sempre enviar notificação, sem verificar se a mudança é relevante
+        await notificationService.sendAppointmentUpdate(businessId, data[0], {
+          start_time: currentAppointment.start_time,
+          professional_id: currentAppointment.professional_id,
+          service_id: currentAppointment.service_id,
+        });
+      }
+    } catch (notificationError) {
+      // Log but don't fail the appointment update if notification fails
+      console.error(
+        "Error sending appointment update notification:",
+        notificationError
       );
     }
 
@@ -145,10 +192,10 @@ export async function DELETE(
 
     const id = params.id;
 
-    // First, get the appointment to check its date
+    // First, get the appointment for cancellation notification and date check
     const { data: appointment, error: fetchError } = await supabase
       .from("appointments")
-      .select("start_time")
+      .select("*")
       .eq("id", id)
       .eq("business_id", businessId)
       .single();
@@ -183,6 +230,30 @@ export async function DELETE(
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    // Send WhatsApp notification if enabled
+    try {
+      const notificationService = new NotificationService();
+
+      // Get notification preferences
+      const preferences = await notificationService.getNotificationPreferences(
+        businessId
+      );
+
+      // Send cancellation notification if enabled
+      if (preferences && preferences.appointment_cancellation) {
+        await notificationService.sendAppointmentCancellation(
+          businessId,
+          appointment
+        );
+      }
+    } catch (notificationError) {
+      // Log but don't fail the appointment deletion if notification fails
+      console.error(
+        "Error sending appointment cancellation notification:",
+        notificationError
+      );
     }
 
     return NextResponse.json({ success: true }, { status: 200 });

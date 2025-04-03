@@ -45,6 +45,8 @@ interface NotificationPreferences {
   appointment_confirmation: boolean;
   appointment_reminder: boolean;
   follow_up_message: boolean;
+  appointment_update: boolean;
+  appointment_cancellation: boolean;
 }
 
 export default function WhatsAppPage() {
@@ -63,6 +65,8 @@ export default function WhatsAppPage() {
       appointment_confirmation: true,
       appointment_reminder: false,
       follow_up_message: false,
+      appointment_update: true,
+      appointment_cancellation: true,
     });
   const { toast } = useToast();
   const whatsappService = new WhatsAppService();
@@ -612,6 +616,53 @@ export default function WhatsAppPage() {
                           setNotificationPreferences((prev) => ({
                             ...prev,
                             follow_up_message: checked,
+                          }))
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  <div className="border rounded-lg p-4 bg-muted/10">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-1">
+                        <div className="font-medium">
+                          Atualização de Agendamento
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          Envia uma mensagem quando um agendamento é atualizado
+                          (data, hora, serviço ou profissional)
+                        </p>
+                      </div>
+                      <Switch
+                        checked={notificationPreferences.appointment_update}
+                        onCheckedChange={(checked) =>
+                          setNotificationPreferences((prev) => ({
+                            ...prev,
+                            appointment_update: checked,
+                          }))
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  <div className="border rounded-lg p-4 bg-muted/10">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-1">
+                        <div className="font-medium">
+                          Cancelamento de Agendamento
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          Envia uma mensagem quando um agendamento é cancelado
+                        </p>
+                      </div>
+                      <Switch
+                        checked={
+                          notificationPreferences.appointment_cancellation
+                        }
+                        onCheckedChange={(checked) =>
+                          setNotificationPreferences((prev) => ({
+                            ...prev,
+                            appointment_cancellation: checked,
                           }))
                         }
                       />
