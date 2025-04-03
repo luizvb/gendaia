@@ -82,7 +82,7 @@ export function CalendarView() {
   } | null>(null);
   const [selectedAppointment, setSelectedAppointment] =
     useState<Appointment | null>(null);
-  const [view, setView] = useState<"day" | "week" | "month">("week");
+  const [view, setView] = useState<"day" | "week" | "month">("day");
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [services, setServices] = useState<Service[]>([]);
@@ -1094,7 +1094,7 @@ export function CalendarView() {
                                     selectedProfessional
                                   ) && (
                                     <div className="absolute inset-0 flex items-center justify-center bg-gray-200/30 text-black/20 text-xs font-medium z-30">
-                                      Horário indisponível
+                                      {/* Horário indisponível */}
                                     </div>
                                   )}
 

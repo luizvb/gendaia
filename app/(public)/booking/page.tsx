@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { format, addDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Calendar, Phone, User } from "lucide-react";
+import Image from "next/image";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -214,6 +215,11 @@ export default function BookingPage() {
       if (!servicesResponse.ok) throw new Error("Failed to load services");
       const servicesData = await servicesResponse.json();
       setServices(servicesData);
+
+      // Set initial service if available
+      if (servicesData.length > 0) {
+        setService(servicesData[0].id);
+      }
 
       // Set initial professional if available
       if (professionalsData.length > 0) {
@@ -444,6 +450,17 @@ export default function BookingPage() {
   return (
     <div className="container mx-auto max-w-4xl py-8">
       <div className="mb-8 text-center">
+        {business.logo_url && (
+          <div className="flex justify-center mb-4">
+            <Image
+              src={business.logo_url}
+              alt={`${business.name} logo`}
+              width={120}
+              height={120}
+              className="rounded-md"
+            />
+          </div>
+        )}
         <h1 className="text-3xl font-bold">{business.name} - Agendamento</h1>
         <p className="text-muted-foreground">
           Agende seu horário ou consulte seus agendamentos
