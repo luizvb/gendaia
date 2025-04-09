@@ -104,14 +104,20 @@ export default function BookingPage() {
 
   // Fetch all availability data
   const fetchAllAvailability = async () => {
-    if (!business?.id) return;
+    if (!business?.id) {
+      console.log("Skipping fetchAllAvailability: No business ID available");
+      return;
+    }
 
     try {
+      console.log("Fetching all availability data for business:", business.id);
       const response = await fetch("/api/availability?fetch_all=true", {
         headers: createHeaders(),
       });
       if (!response.ok) throw new Error("Falha ao carregar disponibilidades");
       const data = await response.json();
+
+      console.log("Data:", data);
 
       // Transform the data into a more convenient format for lookup
       const availabilityMap: {
@@ -124,6 +130,8 @@ export default function BookingPage() {
         availabilityMap[prof.id] = prof.availability;
       });
 
+      console.log("Availability map:", availabilityMap);
+
       setProfessionalsAvailability(availabilityMap);
     } catch (error) {
       console.error("Erro ao carregar disponibilidades:", error);
@@ -134,11 +142,18 @@ export default function BookingPage() {
   // Gerar horários disponíveis
   useEffect(() => {
     if (professional && date && service && business?.id) {
+      console.log("All dependencies ready, generating time slots");
       generateTimeSlots();
     } else {
+      console.log("Not all dependencies ready for time slots:", {
+        hasProfessional: Boolean(professional),
+        hasDate: Boolean(date),
+        hasService: Boolean(service),
+        hasBusinessId: Boolean(business?.id),
+      });
       setTimeSlots([]);
     }
-  }, [date, professional, service, business]);
+  }, [date, professional, service, business, professionalsAvailability]);
 
   useEffect(() => {
     const fetchBusinessData = async () => {
@@ -173,10 +188,8 @@ export default function BookingPage() {
         setBusiness(businessData);
 
         // Now fetch other data needed for booking using the business ID
-        await fetchData(businessData.id);
-
-        // After business data and initial data are loaded, fetch availability
         await fetchAllAvailability();
+        await fetchData(businessData.id);
 
         // Check if we need to load appointments
         const savedPhone = localStorage.getItem(PHONE_STORAGE_KEY);
@@ -234,25 +247,42 @@ export default function BookingPage() {
 
   const generateTimeSlots = async () => {
     if (!date || !professional || !service) {
+      console.log("Missing required data for time slots:", {
+        date,
+        professional,
+        service,
+      });
       setTimeSlots([]);
       return;
     }
 
     try {
+      console.log("Generating time slots for:", {
+        date,
+        professional,
+        service,
+      });
       const selectedService = services.find((s) => s.id === service);
       if (!selectedService) {
+        console.log("Service not found:", service);
         setTimeSlots([]);
         return;
       }
 
       // Format date for lookup in the availability map
       const formattedDate = format(date, "yyyy-MM-dd");
+      console.log("Looking for availability on:", formattedDate);
+      console.log(
+        "Current professionalsAvailability:",
+        professionalsAvailability
+      );
 
       // Check if we have availability data for this professional and date
       if (
         !professionalsAvailability[professional] ||
         !professionalsAvailability[professional][formattedDate]
       ) {
+        console.log("No availability data found, fetching...");
         // If we don't have data, fetch it
         await fetchAllAvailability();
 
@@ -261,10 +291,16 @@ export default function BookingPage() {
           !professionalsAvailability[professional] ||
           !professionalsAvailability[professional][formattedDate]
         ) {
+          console.log("Still no availability data after fetching");
           setTimeSlots([]);
           return;
         }
       }
+
+      console.log(
+        "Found availability for professional and date:",
+        professionalsAvailability[professional][formattedDate]
+      );
 
       // Get available slots directly from the map without timezone conversion
       const availableSlots =
