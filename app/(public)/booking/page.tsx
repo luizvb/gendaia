@@ -151,6 +151,7 @@ export default function BookingPage() {
 
         // Check URL params first
         const urlParams = new URLSearchParams(window.location.search);
+        // const businessParam = "nobre-barbearia.gendaia.com.br";
         const businessParam = urlParams.get("business");
 
         // Use business param from URL if available, otherwise use hostname
@@ -289,7 +290,9 @@ export default function BookingPage() {
     setLoadingAppointments(true);
     try {
       const response = await fetch(
-        `/api/appointments?phone=${encodeURIComponent(normalizedPhone)}`,
+        `/api/appointments/by-client-phone?phone=${encodeURIComponent(
+          normalizedPhone
+        )}`,
         { headers: createHeaders() }
       );
       const data = await response.json();
@@ -450,10 +453,10 @@ export default function BookingPage() {
   return (
     <div className="container mx-auto max-w-4xl py-8">
       <div className="mb-8 text-center">
-        {business.logo_url && (
+        {business.logo && (
           <div className="flex justify-center mb-4">
             <Image
-              src={business.logo_url}
+              src={business.logo}
               alt={`${business.name} logo`}
               width={120}
               height={120}
