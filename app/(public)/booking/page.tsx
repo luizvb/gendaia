@@ -111,9 +111,19 @@ export default function BookingPage() {
 
     try {
       console.log("Fetching all availability data for business:", business.id);
-      const response = await fetch("/api/availability?fetch_all=true", {
-        headers: createHeaders(),
-      });
+
+      // Get the service duration if a service is selected
+      const selectedService = service
+        ? services.find((s) => s.id === service)
+        : null;
+      const serviceDuration = selectedService?.duration || 30;
+
+      const response = await fetch(
+        `/api/availability?fetch_all=true&service_duration=${serviceDuration}`,
+        {
+          headers: createHeaders(),
+        }
+      );
       if (!response.ok) throw new Error("Falha ao carregar disponibilidades");
       const data = await response.json();
 
@@ -155,6 +165,7 @@ export default function BookingPage() {
     }
   }, [date, professional, service, business, professionalsAvailability]);
 
+  // Fetch business data and initial data
   useEffect(() => {
     const fetchBusinessData = async () => {
       try {
@@ -166,8 +177,8 @@ export default function BookingPage() {
 
         // Check URL params first
         const urlParams = new URLSearchParams(window.location.search);
-        // const businessParam = "nobre-barbearia.gendaia.com.br";
-        const businessParam = urlParams.get("business");
+        const businessParam = "nobre-barbearia.gendaia.com.br";
+        // const businessParam = urlParams.get("business");
 
         // Use business param from URL if available, otherwise use hostname
         const queryParam = businessParam || hostname;
@@ -188,7 +199,6 @@ export default function BookingPage() {
         setBusiness(businessData);
 
         // Now fetch other data needed for booking using the business ID
-        await fetchAllAvailability();
         await fetchData(businessData.id);
 
         // Check if we need to load appointments
@@ -206,6 +216,13 @@ export default function BookingPage() {
 
     fetchBusinessData();
   }, []);
+
+  // Fetch availability when service changes
+  useEffect(() => {
+    if (business?.id && service) {
+      fetchAllAvailability();
+    }
+  }, [service, business]);
 
   const fetchData = async (businessId: string) => {
     try {
