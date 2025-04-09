@@ -34,6 +34,8 @@ interface Professional {
   color: string;
   email?: string;
   whatsapp?: string;
+  break_start?: string;
+  break_end?: string;
 }
 
 export default function ProfessionalsPage() {
@@ -47,6 +49,8 @@ export default function ProfessionalsPage() {
     color: "#3b82f6",
     email: "",
     whatsapp: "+55 ",
+    break_start: "",
+    break_end: "",
   });
   const [isLoading, setIsLoading] = useState(false);
 
@@ -74,6 +78,8 @@ export default function ProfessionalsPage() {
       color: "#3b82f6",
       email: "",
       whatsapp: "+55 ",
+      break_start: "",
+      break_end: "",
     });
     setIsModalOpen(true);
   };
@@ -88,6 +94,8 @@ export default function ProfessionalsPage() {
       whatsapp: professional.whatsapp
         ? formatPhoneNumber(professional.whatsapp)
         : "+55 ",
+      break_start: professional.break_start || "",
+      break_end: professional.break_end || "",
     });
     setIsModalOpen(true);
   };
@@ -117,6 +125,8 @@ export default function ProfessionalsPage() {
         color: formData.color,
         email: formData.email,
         whatsapp: formData.whatsapp,
+        break_start: formData.break_start || null,
+        break_end: formData.break_end || null,
       };
 
       const url = editingProfessional
@@ -208,6 +218,12 @@ export default function ProfessionalsPage() {
                   {professional.whatsapp}
                 </div>
               )}
+              {professional.break_start && professional.break_end && (
+                <div className="flex items-center gap-2">
+                  <span className="font-medium">Pausa:</span>{" "}
+                  {professional.break_start} - {professional.break_end}
+                </div>
+              )}
             </CardContent>
             <CardFooter className="flex justify-end gap-2">
               <Button
@@ -293,6 +309,30 @@ export default function ProfessionalsPage() {
                 value={formData.color}
                 onChange={handleInputChange}
               />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="break_start">Início da Pausa</Label>
+                <Input
+                  id="break_start"
+                  name="break_start"
+                  type="time"
+                  value={formData.break_start}
+                  onChange={handleInputChange}
+                  placeholder="12:00"
+                />
+              </div>
+              <div>
+                <Label htmlFor="break_end">Fim da Pausa</Label>
+                <Input
+                  id="break_end"
+                  name="break_end"
+                  type="time"
+                  value={formData.break_end}
+                  onChange={handleInputChange}
+                  placeholder="13:00"
+                />
+              </div>
             </div>
           </div>
 

@@ -109,6 +109,8 @@ export async function POST(request: NextRequest) {
           specialty: body.specialty || null,
           email: body.email || null,
           whatsapp: body.whatsapp || null,
+          break_start: body.break_start || null,
+          break_end: body.break_end || null,
         },
       ])
       .select();
@@ -175,6 +177,9 @@ export async function PUT(request: NextRequest) {
     if (body.specialty !== undefined) updateData.specialty = body.specialty;
     if (body.email !== undefined) updateData.email = body.email;
     if (body.whatsapp !== undefined) updateData.whatsapp = body.whatsapp;
+    if (body.break_start !== undefined)
+      updateData.break_start = body.break_start;
+    if (body.break_end !== undefined) updateData.break_end = body.break_end;
 
     // Update professional
     const { error } = await supabase

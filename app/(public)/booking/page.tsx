@@ -177,8 +177,8 @@ export default function BookingPage() {
 
         // Check URL params first
         const urlParams = new URLSearchParams(window.location.search);
-        const businessParam = "nobre-barbearia.gendaia.com.br";
-        // const businessParam = urlParams.get("business");
+        // const businessParam = "nobre-barbearia.gendaia.com.br";
+        const businessParam = urlParams.get("business");
 
         // Use business param from URL if available, otherwise use hostname
         const queryParam = businessParam || hostname;

@@ -117,7 +117,7 @@ export async function GET(request: NextRequest) {
       // Fetch all professionals
       const { data: professionals, error: professionalsError } = await supabase
         .from("professionals")
-        .select("id, name, color, business_id")
+        .select("id, name, color, business_id, break_start, break_end")
         .eq("business_id", businessId);
 
       if (professionalsError) {
@@ -226,7 +226,9 @@ export async function GET(request: NextRequest) {
               dateStr,
               professionalAppointments,
               serviceDuration,
-              hours
+              hours,
+              professional.break_start,
+              professional.break_end
             );
 
             availability[dateStr] = availableSlots;
@@ -244,6 +246,21 @@ export async function GET(request: NextRequest) {
     }
     // Otherwise, maintain original behavior for a specific professional
     else if (professionalId && date) {
+      // Fetch the professional to get break time information
+      const { data: professional, error: professionalError } = await supabase
+        .from("professionals")
+        .select("id, name, color, business_id, break_start, break_end")
+        .eq("id", professionalId)
+        .single();
+
+      if (professionalError) {
+        console.error("Error fetching professional:", professionalError);
+        return NextResponse.json(
+          { error: "Error fetching professional" },
+          { status: 500 }
+        );
+      }
+
       // Fetch existing appointments for the professional on that day using UTC date boundaries
       let query = supabase
         .from("appointments")
@@ -271,7 +288,9 @@ export async function GET(request: NextRequest) {
         date,
         appointments,
         serviceDuration,
-        hours
+        hours,
+        professional?.break_start,
+        professional?.break_end
       );
       return NextResponse.json({ available_slots: availableSlots });
     } else {
@@ -297,7 +316,9 @@ function calculateAvailableSlots(
   dateStr: string,
   appointments: Appointment[],
   serviceDuration: number,
-  businessHours: BusinessHours[]
+  businessHours: BusinessHours[],
+  breakStart?: string,
+  breakEnd?: string
 ): string[] {
   // Work with UTC for all calculations
   const currentDate = new Date(`${dateStr}T00:00:00Z`);
@@ -365,19 +386,67 @@ function calculateAvailableSlots(
 
   // Function to check if a time conflicts with existing appointments
   const hasConflict = (start: Date, end: Date) => {
-    return parsedAppointments.some((appointment) => {
+    // Check if this time slot is within the professional's break time
+    if (breakStart && breakEnd) {
+      try {
+        // Convert slot times to São Paulo time for direct comparison with break times
+        const slotStartSP = convertToSaoPauloTime(start);
+        const slotEndSP = convertToSaoPauloTime(
+          new Date(end.getTime() - 60000)
+        ); // -1 minute to avoid edge case conflicts
+
+        // Helper function to compare times as strings (HH:MM format)
+        const isTimeInRange = (
+          time: string,
+          rangeStart: string,
+          rangeEnd: string
+        ) => {
+          return time >= rangeStart && time < rangeEnd;
+        };
+
+        // Debug logs
+        console.log("Checking slot (SP time):", slotStartSP, "-", slotEndSP);
+        console.log("Break time (SP time):", breakStart, "-", breakEnd);
+
+        // Check if either the start or end time is during the break
+        const startsInBreak = isTimeInRange(slotStartSP, breakStart, breakEnd);
+        const endsInBreak = isTimeInRange(slotEndSP, breakStart, breakEnd);
+
+        // Check if the slot completely contains the break
+        const containsBreak =
+          slotStartSP <= breakStart && slotEndSP >= breakEnd;
+
+        const hasBreakTimeConflict =
+          startsInBreak || endsInBreak || containsBreak;
+
+        if (hasBreakTimeConflict) {
+          console.log("BREAK TIME CONFLICT DETECTED");
+          console.log(
+            `Slot ${slotStartSP}-${slotEndSP} conflicts with break ${breakStart}-${breakEnd}`
+          );
+          return true;
+        }
+      } catch (error) {
+        console.error("Error checking break time conflict:", error);
+      }
+    }
+
+    const appointmentConflict = parsedAppointments.some((appointment) => {
       const appointmentStart = appointment.start_time;
       const appointmentEnd = appointment.end_time;
 
       // Check for exact start time match or actual overlap
-      // A slot conflicts if:
-      // 1. It starts exactly when another appointment starts
-      // 2. It overlaps with an existing appointment (standard overlap check)
       return (
         start.getTime() === appointmentStart.getTime() ||
         (start < appointmentEnd && appointmentStart < end)
       );
     });
+
+    if (appointmentConflict) {
+      console.log("APPOINTMENT CONFLICT DETECTED");
+    }
+
+    return appointmentConflict;
   };
 
   // Function to check if a slot is in the past
