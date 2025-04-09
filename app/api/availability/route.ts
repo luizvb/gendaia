@@ -405,8 +405,6 @@ function calculateAvailableSlots(
         };
 
         // Debug logs
-        console.log("Checking slot (SP time):", slotStartSP, "-", slotEndSP);
-        console.log("Break time (SP time):", breakStart, "-", breakEnd);
 
         // Check if either the start or end time is during the break
         const startsInBreak = isTimeInRange(slotStartSP, breakStart, breakEnd);
@@ -420,10 +418,6 @@ function calculateAvailableSlots(
           startsInBreak || endsInBreak || containsBreak;
 
         if (hasBreakTimeConflict) {
-          console.log("BREAK TIME CONFLICT DETECTED");
-          console.log(
-            `Slot ${slotStartSP}-${slotEndSP} conflicts with break ${breakStart}-${breakEnd}`
-          );
           return true;
         }
       } catch (error) {
