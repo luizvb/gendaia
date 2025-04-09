@@ -110,6 +110,13 @@ export function CalendarView() {
   }>({});
 
   const calendarContainerRef = useRef<HTMLDivElement>(null);
+  // Use useRef to store current services to avoid dependency loops
+  const servicesRef = useRef<Service[]>([]);
+
+  // Update servicesRef when services change
+  useEffect(() => {
+    servicesRef.current = services;
+  }, [services]);
 
   const startOfDay = useCallback((date: Date) => {
     return new Date(
@@ -206,28 +213,42 @@ export function CalendarView() {
   }, [currentDate, view]);
 
   // New function to fetch availability for all professionals
-  const fetchAllAvailability = useCallback(async () => {
-    try {
-      const response = await fetch("/api/availability?fetch_all=true");
-      if (!response.ok) throw new Error("Falha ao carregar disponibilidades");
-      const data = await response.json();
+  const fetchAllAvailability = useCallback(
+    async (specificServiceDuration?: number) => {
+      try {
+        // Use the provided duration or get default from services
+        const defaultDuration =
+          specificServiceDuration !== undefined
+            ? specificServiceDuration
+            : servicesRef.current.length > 0
+            ? servicesRef.current[0].duration
+            : 30;
 
-      // Transform the data into a more convenient format for lookup
-      const availabilityMap: {
-        [professionalId: string]: {
-          [date: string]: string[];
-        };
-      } = {};
+        // Pass service_duration to the API to properly calculate available time slots
+        const response = await fetch(
+          `/api/availability?fetch_all=true&service_duration=${defaultDuration}`
+        );
+        if (!response.ok) throw new Error("Falha ao carregar disponibilidades");
+        const data = await response.json();
 
-      data.professionals_availability.forEach((prof: any) => {
-        availabilityMap[prof.id] = prof.availability;
-      });
+        // Transform the data into a more convenient format for lookup
+        const availabilityMap: {
+          [professionalId: string]: {
+            [date: string]: string[];
+          };
+        } = {};
 
-      setProfessionalsAvailability(availabilityMap);
-    } catch (error) {
-      console.error("Erro ao carregar disponibilidades:", error);
-    }
-  }, []);
+        data.professionals_availability.forEach((prof: any) => {
+          availabilityMap[prof.id] = prof.availability;
+        });
+
+        setProfessionalsAvailability(availabilityMap);
+      } catch (error) {
+        console.error("Erro ao carregar disponibilidades:", error);
+      }
+    },
+    []
+  );
 
   // Fetch business hours
   const fetchBusinessHours = useCallback(async () => {
@@ -373,8 +394,9 @@ export function CalendarView() {
 
   const currentDateTimestamp = currentDate.getTime();
 
+  // Refresh appointments and availability when date or view changes
   useEffect(() => {
-    // Buscar dados quando currentDate ou view mudarem
+    // Fetch data when currentDate or view change
     const fetchData = async () => {
       setIsLoading(true);
       try {
@@ -1324,6 +1346,9 @@ export function CalendarView() {
           setIsModalOpen(false);
           setSelectedAppointment(null);
           setSelectedSlot(null);
+
+          // Reset to default service duration when modal closes
+          fetchAllAvailability(30);
         }}
         selectedSlot={selectedSlot}
         selectedAppointment={selectedAppointment}
@@ -1334,6 +1359,7 @@ export function CalendarView() {
         onClientCreated={handleClientCreated}
         onAppointmentCreated={refreshAppointmentsAndAvailability}
         onAppointmentUpdated={refreshAppointmentsAndAvailability}
+        onServiceSelected={(duration) => fetchAllAvailability(duration)}
         professionalsAvailability={professionalsAvailability}
       />
 

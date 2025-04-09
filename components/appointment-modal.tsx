@@ -91,6 +91,7 @@ interface AppointmentModalProps {
   onClientCreated?: (client: Client) => void;
   onAppointmentCreated?: () => void;
   onAppointmentUpdated?: () => void;
+  onServiceSelected?: (serviceDuration: number) => void;
   professionalsAvailability?: {
     [professionalId: string]: {
       [date: string]: string[];
@@ -110,6 +111,7 @@ export function AppointmentModal({
   onClientCreated,
   onAppointmentCreated,
   onAppointmentUpdated,
+  onServiceSelected,
   professionalsAvailability = {},
 }: AppointmentModalProps) {
   const [date, setDate] = useState<Date | undefined>(
@@ -680,6 +682,12 @@ export function AppointmentModal({
               onValueChange={(value) => {
                 setServiceId(value);
                 setTime(""); // Limpar horário ao mudar de serviço
+
+                // Notificar sobre a mudança de serviço com a duração
+                const selectedService = services.find((s) => s.id === value);
+                if (selectedService && onServiceSelected) {
+                  onServiceSelected(selectedService.duration);
+                }
               }}
             >
               <SelectTrigger>
