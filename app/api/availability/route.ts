@@ -400,7 +400,7 @@ function calculateAvailableSlots(
           time: string,
           rangeStart: string,
           rangeEnd: string
-        ) => {
+        ): boolean => {
           return time >= rangeStart && time < rangeEnd;
         };
 
@@ -493,12 +493,6 @@ function calculateAvailableSlots(
 
     // Skip if there's a conflict with an existing appointment
     if (hasConflict(currentSlot, serviceEnd)) {
-      currentSlot.setUTCMinutes(currentSlot.getUTCMinutes() + 15);
-      continue;
-    }
-
-    // Skip if the slot is in the past
-    if (isPast(currentSlot)) {
       currentSlot.setUTCMinutes(currentSlot.getUTCMinutes() + 15);
       continue;
     }
