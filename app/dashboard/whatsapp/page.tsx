@@ -23,6 +23,7 @@ import {
   Smartphone,
   Bell,
   Settings,
+  Bot,
 } from "lucide-react";
 import Image from "next/image";
 import { Input } from "@/components/ui/input";
@@ -31,6 +32,13 @@ import QRCode from "react-qr-code";
 import { formatPhoneNumber, normalizePhoneNumber } from "@/lib/utils";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface Message {
   id: string;
@@ -49,6 +57,18 @@ interface NotificationPreferences {
   appointment_cancellation: boolean;
 }
 
+interface AgentSettings {
+  enabled: boolean;
+  name: string;
+  personality: string;
+  description: string;
+  data_collection: boolean;
+  auto_booking: boolean;
+  delay_response: boolean;
+  topic_restriction: boolean;
+  allowed_topics: string;
+}
+
 export default function WhatsAppPage() {
   const [businessId, setBusinessId] = useState<string | null>(null);
   const [qrCode, setQrCode] = useState<string | null>(null);
@@ -60,6 +80,19 @@ export default function WhatsAppPage() {
   const [isSending, setIsSending] = useState(false);
   const [isLoadingPreferences, setIsLoadingPreferences] = useState(false);
   const [isSavingPreferences, setIsSavingPreferences] = useState(false);
+  const [isSavingAgentSettings, setIsSavingAgentSettings] = useState(false);
+  const [agentSettings, setAgentSettings] = useState<AgentSettings>({
+    enabled: false,
+    name: "Luiza",
+    personality: "professional",
+    description:
+      "Sou especialista em agendamento de serviços. Posso ajudar com dúvidas sobre serviços, profissionais e disponibilidade de horários.",
+    data_collection: true,
+    auto_booking: false,
+    delay_response: true,
+    topic_restriction: true,
+    allowed_topics: "agendamento de serviços",
+  });
   const [notificationPreferences, setNotificationPreferences] =
     useState<NotificationPreferences>({
       appointment_confirmation: true,
@@ -91,6 +124,7 @@ export default function WhatsAppPage() {
           checkSessionStatus(profile.business_id);
           loadMessages(profile.business_id);
           loadNotificationPreferences(profile.business_id);
+          loadAgentSettings(profile.business_id);
         }
       }
     };
@@ -156,6 +190,28 @@ export default function WhatsAppPage() {
       });
     } finally {
       setIsLoadingPreferences(false);
+    }
+  };
+
+  const loadAgentSettings = async (id: string) => {
+    try {
+      setIsSavingAgentSettings(true);
+      const response = await fetch(`/api/chat/agent-settings`);
+      if (!response.ok) {
+        throw new Error("Failed to load agent settings");
+      }
+      const data = await response.json();
+      setAgentSettings(data);
+    } catch (error) {
+      console.error("Error loading agent settings:", error);
+      toast({
+        title: "Erro ao carregar configurações do agente",
+        description:
+          error instanceof Error ? error.message : "Erro desconhecido",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingAgentSettings(false);
     }
   };
 
@@ -281,6 +337,41 @@ export default function WhatsAppPage() {
     });
   };
 
+  const saveAgentSettings = async () => {
+    if (!businessId) return;
+
+    setIsSavingAgentSettings(true);
+    try {
+      const response = await fetch(`/api/chat/agent-settings`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(agentSettings),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to save agent settings");
+      }
+
+      toast({
+        title: "Configurações salvas",
+        description:
+          "As configurações do agente de IA foram salvas com sucesso",
+      });
+    } catch (error) {
+      console.error("Error saving agent settings:", error);
+      toast({
+        title: "Erro ao salvar configurações",
+        description:
+          error instanceof Error ? error.message : "Erro desconhecido",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingAgentSettings(false);
+    }
+  };
+
   return (
     <div className="container mx-auto py-6">
       <div className="flex items-center mb-6">
@@ -295,7 +386,7 @@ export default function WhatsAppPage() {
         className="bg-card rounded-lg shadow-sm border"
       >
         <div className="px-4 pt-4">
-          <TabsList className="mb-4 grid w-full grid-cols-3 p-1">
+          <TabsList className="mb-4 grid w-full grid-cols-4 p-1">
             <TabsTrigger value="config" className="rounded-md">
               <QrCode className="h-4 w-4 mr-2" />
               Configuração
@@ -303,6 +394,10 @@ export default function WhatsAppPage() {
             <TabsTrigger value="messages" className="rounded-md">
               <Send className="h-4 w-4 mr-2" />
               Mensagens
+            </TabsTrigger>
+            <TabsTrigger value="agent" className="rounded-md">
+              <Bot className="h-4 w-4 mr-2" />
+              Agente de IA
             </TabsTrigger>
             <TabsTrigger value="notifications" className="rounded-md">
               <Bell className="h-4 w-4 mr-2" />
@@ -531,6 +626,299 @@ export default function WhatsAppPage() {
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        <TabsContent value="agent">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <Bot className="h-5 w-5 text-blue-500 dark:text-blue-400 mr-2" />
+                Configuração do Agente de IA
+              </CardTitle>
+              <CardDescription>
+                Personalize como o agente de IA interage com seus clientes via
+                WhatsApp
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-6">
+                <div className="border rounded-lg p-4 bg-muted/10">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-1">
+                      <div className="font-medium">Habilitar Agente de IA</div>
+                      <p className="text-sm text-muted-foreground">
+                        Quando ativado, o agente de IA responderá
+                        automaticamente às mensagens recebidas
+                      </p>
+                    </div>
+                    <Switch
+                      checked={agentSettings.enabled}
+                      onCheckedChange={(checked) =>
+                        setAgentSettings((prev) => ({
+                          ...prev,
+                          enabled: checked,
+                        }))
+                      }
+                      disabled={!isActive || isSavingAgentSettings}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <h3 className="text-lg font-medium">Perfil do Agente</h3>
+
+                  <div className="grid gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="agent-name">Nome do Agente</Label>
+                      <Input
+                        id="agent-name"
+                        placeholder="Ex: Luiza, Carlos, Ana..."
+                        value={agentSettings.name}
+                        onChange={(e) =>
+                          setAgentSettings((prev) => ({
+                            ...prev,
+                            name: e.target.value,
+                          }))
+                        }
+                        disabled={
+                          !agentSettings.enabled || isSavingAgentSettings
+                        }
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="agent-persona">Personalidade</Label>
+                      <Select
+                        value={agentSettings.personality}
+                        onValueChange={(value) =>
+                          setAgentSettings((prev) => ({
+                            ...prev,
+                            personality: value,
+                          }))
+                        }
+                        disabled={
+                          !agentSettings.enabled || isSavingAgentSettings
+                        }
+                      >
+                        <SelectTrigger id="agent-persona">
+                          <SelectValue placeholder="Selecione uma personalidade" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="professional">
+                            Profissional e Formal
+                          </SelectItem>
+                          <SelectItem value="friendly">
+                            Amigável e Descontraído
+                          </SelectItem>
+                          <SelectItem value="enthusiastic">
+                            Entusiasmado e Energético
+                          </SelectItem>
+                          <SelectItem value="helpful">
+                            Prestativo e Atencioso
+                          </SelectItem>
+                          <SelectItem value="empathetic">
+                            Empático e Compreensivo
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="agent-description">
+                        Descrição Personalizada
+                      </Label>
+                      <Textarea
+                        id="agent-description"
+                        placeholder="Descreva a personalidade e o estilo de comunicação do seu agente..."
+                        value={agentSettings.description}
+                        onChange={(e) =>
+                          setAgentSettings((prev) => ({
+                            ...prev,
+                            description: e.target.value,
+                          }))
+                        }
+                        rows={4}
+                        disabled={
+                          !agentSettings.enabled || isSavingAgentSettings
+                        }
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Descreva como seu agente deve se comunicar, suas
+                        características de personalidade e comportamento.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <h3 className="text-lg font-medium">
+                    Comportamento do Agente
+                  </h3>
+
+                  <div className="border rounded-lg p-4 bg-muted/10">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-1">
+                        <div className="font-medium">Coleta de Dados</div>
+                        <p className="text-sm text-muted-foreground">
+                          O agente coletará informações como nome e telefone
+                          automaticamente
+                        </p>
+                      </div>
+                      <Switch
+                        checked={agentSettings.data_collection}
+                        onCheckedChange={(checked) =>
+                          setAgentSettings((prev) => ({
+                            ...prev,
+                            data_collection: checked,
+                          }))
+                        }
+                        disabled={
+                          !agentSettings.enabled || isSavingAgentSettings
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  <div className="border rounded-lg p-4 bg-muted/10">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-1">
+                        <div className="font-medium">
+                          Agendamento Automático
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          O agente pode criar agendamentos sem aprovação manual
+                        </p>
+                      </div>
+                      <Switch
+                        checked={agentSettings.auto_booking}
+                        onCheckedChange={(checked) =>
+                          setAgentSettings((prev) => ({
+                            ...prev,
+                            auto_booking: checked,
+                          }))
+                        }
+                        disabled={
+                          !agentSettings.enabled || isSavingAgentSettings
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  <div className="border rounded-lg p-4 bg-muted/10">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-1">
+                        <div className="font-medium">Tempo de Resposta</div>
+                        <p className="text-sm text-muted-foreground">
+                          Adiciona um atraso na resposta para parecer mais
+                          natural
+                        </p>
+                      </div>
+                      <Switch
+                        checked={agentSettings.delay_response}
+                        onCheckedChange={(checked) =>
+                          setAgentSettings((prev) => ({
+                            ...prev,
+                            delay_response: checked,
+                          }))
+                        }
+                        disabled={
+                          !agentSettings.enabled || isSavingAgentSettings
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  <div className="border rounded-lg p-4 bg-muted/10">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-1">
+                        <div className="font-medium">Restrição de Assunto</div>
+                        <p className="text-sm text-muted-foreground">
+                          Limita o agente a falar apenas sobre os assuntos
+                          permitidos
+                        </p>
+                      </div>
+                      <Switch
+                        checked={agentSettings.topic_restriction}
+                        onCheckedChange={(checked) =>
+                          setAgentSettings((prev) => ({
+                            ...prev,
+                            topic_restriction: checked,
+                          }))
+                        }
+                        disabled={
+                          !agentSettings.enabled || isSavingAgentSettings
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  {agentSettings.topic_restriction && (
+                    <div className="space-y-2">
+                      <Label htmlFor="allowed-topics">
+                        Assuntos Permitidos
+                      </Label>
+                      <Textarea
+                        id="allowed-topics"
+                        placeholder="Ex: agendamento de serviços, horários disponíveis, preços..."
+                        value={agentSettings.allowed_topics}
+                        onChange={(e) =>
+                          setAgentSettings((prev) => ({
+                            ...prev,
+                            allowed_topics: e.target.value,
+                          }))
+                        }
+                        rows={3}
+                        disabled={
+                          !agentSettings.enabled || isSavingAgentSettings
+                        }
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Lista de assuntos separados por vírgula que o agente
+                        pode discutir. Qualquer outro assunto será recusado
+                        educadamente.
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="bg-yellow-500/10 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
+                  <div className="flex gap-3">
+                    <Settings className="h-5 w-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <h4 className="font-medium text-yellow-600 dark:text-yellow-400">
+                        Comportamento do Agente
+                      </h4>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        O agente de IA responderá automaticamente às mensagens
+                        recebidas no WhatsApp quando estiver habilitado.
+                        Certifique-se de que seu WhatsApp esteja conectado para
+                        que o agente funcione corretamente.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+            <CardFooter className="border-t bg-muted/50 pt-4">
+              <Button
+                onClick={saveAgentSettings}
+                disabled={isSavingAgentSettings || !isActive}
+                className="w-full"
+              >
+                {isSavingAgentSettings ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Bot className="mr-2 h-4 w-4" />
+                )}
+                Salvar Configurações do Agente
+              </Button>
+              {!isActive && (
+                <p className="text-xs text-muted-foreground mt-2">
+                  Para usar o agente de IA, conecte seu WhatsApp primeiro.
+                </p>
+              )}
+            </CardFooter>
+          </Card>
         </TabsContent>
 
         <TabsContent value="notifications">

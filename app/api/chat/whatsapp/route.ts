@@ -10,6 +10,26 @@ import {
   ToolResult,
 } from "../../../lib/tool-handlers";
 
+/**
+ * WhatsApp AI Agent API
+ *
+ * This endpoint handles WhatsApp messages using an AI agent powered by AWS Bedrock.
+ *
+ * AI Agent Settings:
+ * - enabled: Whether the AI agent is active for this business
+ * - name: The name the AI agent will use when introducing itself
+ * - personality: The personality style of the agent (professional, friendly, etc.)
+ * - description: Custom description of the agent's personality and behavior
+ * - data_collection: Whether the agent should proactively collect customer information
+ * - auto_booking: Whether the agent can finalize bookings without human approval
+ * - delay_response: Whether to add a small delay before responses to seem more natural
+ * - topic_restriction: Whether the agent should only talk about specific topics
+ * - allowed_topics: Comma-separated list of topics the agent is allowed to discuss
+ *
+ * These settings are stored in the whatsapp_agent_settings table and linked to the business.
+ * If the AI agent is disabled, messages will not be processed by the AI.
+ */
+
 const bedrock = new BedrockRuntimeClient({
   region: process.env.AWS_REGION || "us-east-1",
   credentials: {
@@ -237,6 +257,78 @@ export async function POST(req: Request) {
 
     const businessId = businesses[0].id;
 
+    // Get agent settings for this business
+    const { data: agentSettings, error: agentSettingsError } = await supabase
+      .from("whatsapp_agent_settings")
+      .select("*")
+      .eq("business_id", businessId)
+      .single();
+
+    // If agent is disabled or settings don't exist, return early
+    if (agentSettingsError || !agentSettings || !agentSettings.enabled) {
+      console.log("AI Agent is disabled for this business");
+      return NextResponse.json({
+        completion:
+          "O agente de IA está desativado para este negócio. Por favor, ative-o nas configurações do WhatsApp para permitir respostas automáticas.",
+      });
+    }
+
+    // Customize system prompt based on agent settings
+    let customizedSystemPrompt = SYSTEM_PROMPT;
+
+    // Replace agent name
+    customizedSystemPrompt = customizedSystemPrompt.replace(
+      "Sou Luiza e sou especialista",
+      `Sou ${agentSettings.name} e sou especialista`
+    );
+
+    // Add custom personality description
+    if (agentSettings.description) {
+      customizedSystemPrompt = customizedSystemPrompt.replace(
+        "Minha personalidade:",
+        `Minha personalidade:\n${agentSettings.description}\n`
+      );
+    }
+
+    // Modify behavior based on settings
+    if (!agentSettings.data_collection) {
+      // If data collection is disabled, remove prompts to collect info
+      customizedSystemPrompt = customizedSystemPrompt.replace(
+        "- IMPORTANTE: Se o nome e telefone do cliente não foram informados, SEMPRE pergunte essas informações ANTES de tentar validar ou criar o agendamento",
+        "- NOTA: Não insista em coletar informações pessoais se o cliente não as fornecer voluntariamente"
+      );
+    }
+
+    if (!agentSettings.auto_booking) {
+      // If auto booking is disabled, add extra confirmation steps
+      customizedSystemPrompt +=
+        "\nIMPORTANTE: Nunca finalize um agendamento diretamente. Sempre informe que um atendente humano entrará em contato para confirmar.";
+    }
+
+    // Add topic restriction if enabled
+    if (agentSettings.topic_restriction) {
+      // Always include agendamento de serviços and the business description
+      let topicsList = agentSettings.allowed_topics
+        ? agentSettings.allowed_topics.split(",").map((t: string) => t.trim())
+        : [];
+      topicsList.push("agendamento de serviços");
+
+      // Add business description as an allowed topic if it exists
+      if (businesses[0].description) {
+        topicsList.push(businesses[0].description.trim());
+      }
+
+      // Remove duplicates and join with commas
+      const uniqueTopics = [...new Set(topicsList)].join(", ");
+
+      customizedSystemPrompt += `\n\nRESTRIÇÃO DE ASSUNTO:
+- Você está AUTORIZADO a falar APENAS sobre os seguintes assuntos: ${uniqueTopics}
+- Se o cliente perguntar algo fora desses assuntos, responda educadamente que você é um assistente especializado apenas nos tópicos acima
+- Recuse-se a responder qualquer pergunta fora desses tópicos, mesmo que pareça similar
+- NÃO FORNEÇA informações sobre outros assuntos, mesmo se o cliente insistir
+- Sugira que o cliente entre em contato diretamente para falar sobre outros assuntos`;
+    }
+
     // Fetch message history from the whatsapp_messages table
     const { data: whatsappMessages, error: messagesError } = await supabase
       .from("whatsapp_messages")
@@ -362,7 +454,7 @@ export async function POST(req: Request) {
       system: [
         {
           text:
-            SYSTEM_PROMPT +
+            customizedSystemPrompt +
             `\n\n Sobre a empresa atual: ${businesses[0].name} - ${businesses[0].description}. Dados do cliente atual: Nome: ${client_name} - Telefone: ${client_phone}`,
         },
       ],
@@ -607,7 +699,7 @@ export async function POST(req: Request) {
           system: [
             {
               text:
-                SYSTEM_PROMPT +
+                customizedSystemPrompt +
                 `\n\n Sobre a empresa atual: ${businesses[0].name} - ${businesses[0].description}. Dados do cliente atual: Nome: ${client_name} - Telefone: ${client_phone}`,
             },
           ],
@@ -796,6 +888,15 @@ export async function POST(req: Request) {
 
         await supabase.from("whatsapp_messages").insert(finalMessageToSave);
 
+        // Add delay if the setting is enabled
+        if (agentSettings?.delay_response) {
+          // Calculate a random delay between 1-3 seconds
+          const delayTime = Math.floor(Math.random() * 2000) + 1000;
+
+          // Wait for the delay time
+          await new Promise((resolve) => setTimeout(resolve, delayTime));
+        }
+
         return NextResponse.json({ completion: toolText });
       }
     }
@@ -815,6 +916,15 @@ export async function POST(req: Request) {
     };
 
     await supabase.from("whatsapp_messages").insert(assistantMessageToSave);
+
+    // Add delay if the setting is enabled
+    if (agentSettings?.delay_response) {
+      // Calculate a random delay between 1-3 seconds
+      const delayTime = Math.floor(Math.random() * 2000) + 1000;
+
+      // Wait for the delay time
+      await new Promise((resolve) => setTimeout(resolve, delayTime));
+    }
 
     return NextResponse.json({ completion: text });
   } catch (error: any) {

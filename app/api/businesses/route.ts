@@ -118,6 +118,35 @@ export async function POST(request: NextRequest) {
       // Continue even if subdomain creation fails
     }
 
+    // Initialize AI agent settings
+    try {
+      // Default allowed topics
+      const defaultTopics = "agendamento de serviços";
+
+      // Always include the business description if it exists
+      let allowedTopics = defaultTopics;
+      if (businessData.description) {
+        allowedTopics = `${defaultTopics}, ${businessData.description}`;
+      }
+
+      await supabase.from("whatsapp_agent_settings").insert({
+        business_id: business.id,
+        enabled: false,
+        name: "Luiza",
+        personality: "professional",
+        description:
+          "Sou especialista em agendamento de serviços. Posso ajudar com dúvidas sobre serviços, profissionais e disponibilidade de horários.",
+        data_collection: true,
+        auto_booking: false,
+        delay_response: true,
+        topic_restriction: true,
+        allowed_topics: allowedTopics,
+      });
+    } catch (error) {
+      console.error("Error initializing AI agent settings:", error);
+      // Continue even if agent settings initialization fails
+    }
+
     return NextResponse.json(business, { status: 201 });
   } catch (error) {
     console.error("Error creating business:", error);
