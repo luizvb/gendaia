@@ -343,7 +343,7 @@ export async function POST(req: Request) {
     );
 
     const command = new ConverseCommand({
-      modelId: "anthropic.claude-3-sonnet-20240229-v1:0",
+      modelId: "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
       messages: processedMessages.map((m: any) => {
         // Se o conteúdo já for um array, assumimos que é um toolResult
         if (Array.isArray(m.content)) {

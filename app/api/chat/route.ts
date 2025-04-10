@@ -3,7 +3,6 @@ import {
   ConverseCommand,
 } from "@aws-sdk/client-bedrock-runtime";
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { getBusinessId } from "@/app/lib/business-id";
 import { handleToolCalls, ToolUse, ToolResult } from "../../lib/tool-handlers";
 
@@ -165,7 +164,6 @@ export async function POST(req: Request) {
   try {
     const { messages } = await req.json();
 
-    const supabase = await createClient();
     let businessId: string;
 
     try {
@@ -179,7 +177,7 @@ export async function POST(req: Request) {
     }
 
     const command = new ConverseCommand({
-      modelId: "anthropic.claude-3-sonnet-20240229-v1:0",
+      modelId: "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
       messages: messages.map((m: any) => ({
         role: m.role,
         content: Array.isArray(m.content) ? m.content : [{ text: m.content }],
