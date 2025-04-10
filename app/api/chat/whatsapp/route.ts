@@ -661,7 +661,6 @@ export async function POST(req: Request) {
             },
           })),
         };
-
         // Salvar a mensagem da IA no banco de dados
         const assistantMessageToSave = {
           business_id: businessId,
@@ -694,7 +693,7 @@ export async function POST(req: Request) {
 
         // Criar uma nova chamada com as mensagens atualizadas
         const command = new ConverseCommand({
-          modelId: "anthropic.claude-3-sonnet-20240229-v1:0",
+          modelId: "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
           messages: updatedMessages,
           system: [
             {
