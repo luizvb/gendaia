@@ -24,6 +24,9 @@ import {
   Bell,
   Settings,
   Bot,
+  Check,
+  X,
+  Users,
 } from "lucide-react";
 import Image from "next/image";
 import { Input } from "@/components/ui/input";
@@ -39,6 +42,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
+} from "@/components/ui/command";
+import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface Message {
   id: string;
@@ -47,6 +66,13 @@ interface Message {
   message: string;
   direction: "incoming" | "outgoing";
   created_at: string;
+}
+
+interface Client {
+  id: number;
+  name: string;
+  phone: string;
+  email?: string;
 }
 
 interface NotificationPreferences {
@@ -81,6 +107,11 @@ export default function WhatsAppPage() {
   const [isLoadingPreferences, setIsLoadingPreferences] = useState(false);
   const [isSavingPreferences, setIsSavingPreferences] = useState(false);
   const [isSavingAgentSettings, setIsSavingAgentSettings] = useState(false);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [isLoadingClients, setIsLoadingClients] = useState(false);
+  const [selectedClients, setSelectedClients] = useState<Client[]>([]);
+  const [selectAllChecked, setSelectAllChecked] = useState(false);
+  const [messageDelay, setMessageDelay] = useState(2000);
   const [agentSettings, setAgentSettings] = useState<AgentSettings>({
     enabled: false,
     name: "Luiza",
@@ -125,12 +156,33 @@ export default function WhatsAppPage() {
           loadMessages(profile.business_id);
           loadNotificationPreferences(profile.business_id);
           loadAgentSettings(profile.business_id);
+          fetchClients();
         }
       }
     };
 
     fetchBusinessData();
   }, []);
+
+  const fetchClients = async () => {
+    setIsLoadingClients(true);
+    try {
+      const response = await fetch("/api/clients");
+      if (!response.ok) throw new Error("Failed to fetch clients");
+      const data = await response.json();
+      setClients(data);
+    } catch (error) {
+      console.error("Error loading clients:", error);
+      toast({
+        title: "Erro ao carregar clientes",
+        description:
+          error instanceof Error ? error.message : "Erro desconhecido",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingClients(false);
+    }
+  };
 
   const checkSessionStatus = async (id: string) => {
     const supabase = createClient();
@@ -307,34 +359,85 @@ export default function WhatsAppPage() {
   };
 
   const handleSendMessage = async () => {
-    if (!businessId || !phoneNumber || !messageText) return;
-
-    // Normalize phone number before sending to API
-    const normalizedPhone = normalizePhoneNumber(phoneNumber);
+    if (
+      !businessId ||
+      (!phoneNumber && selectedClients.length === 0) ||
+      !messageText
+    )
+      return;
 
     setIsSending(true);
-    const { success, error } = await whatsappService.sendMessage({
-      businessId,
-      phoneNumber: normalizedPhone,
-      message: messageText,
-    });
-    setIsSending(false);
+    let successCount = 0;
+    let errorCount = 0;
 
-    if (error) {
-      toast({
-        title: "Erro ao enviar mensagem",
-        description: error,
-        variant: "destructive",
+    // Handle sending to manually entered phone
+    if (phoneNumber) {
+      const normalizedPhone = normalizePhoneNumber(phoneNumber);
+
+      const { success, error } = await whatsappService.sendMessage({
+        businessId,
+        phoneNumber: normalizedPhone,
+        message: messageText,
       });
-      return;
+
+      if (success) {
+        successCount++;
+      } else {
+        errorCount++;
+        console.error("Error sending to", normalizedPhone, error);
+      }
     }
 
+    // Handle sending to selected clients
+    if (selectedClients.length > 0) {
+      for (let i = 0; i < selectedClients.length; i++) {
+        const client = selectedClients[i];
+        const normalizedPhone = normalizePhoneNumber(client.phone);
+
+        // Send message
+        const { success, error } = await whatsappService.sendMessage({
+          businessId,
+          phoneNumber: normalizedPhone,
+          message: messageText,
+        });
+
+        if (success) {
+          successCount++;
+        } else {
+          errorCount++;
+          console.error(
+            "Error sending to",
+            client.name,
+            normalizedPhone,
+            error
+          );
+        }
+
+        // Add delay between messages (only if not the last message)
+        if (i < selectedClients.length - 1) {
+          await new Promise((resolve) => setTimeout(resolve, messageDelay));
+        }
+      }
+    }
+
+    setIsSending(false);
     setMessageText("");
 
-    toast({
-      title: "Mensagem enviada",
-      description: "Mensagem enviada com sucesso",
-    });
+    if (successCount > 0) {
+      toast({
+        title: "Mensagens enviadas",
+        description: `${successCount} mensagem(ns) enviada(s) com sucesso${
+          errorCount > 0 ? `, ${errorCount} falhou(aram)` : ""
+        }`,
+        variant: errorCount > 0 ? "destructive" : "default",
+      });
+    } else {
+      toast({
+        title: "Erro ao enviar mensagens",
+        description: "Nenhuma mensagem foi enviada com sucesso",
+        variant: "destructive",
+      });
+    }
   };
 
   const saveAgentSettings = async () => {
@@ -372,6 +475,40 @@ export default function WhatsAppPage() {
     }
   };
 
+  // Helper functions for client selection
+  const handleSelectClient = (client: Client) => {
+    setSelectedClients((prev) => {
+      // Check if client is already selected
+      const isSelected = prev.some((c) => c.id === client.id);
+
+      // If selected, remove it - otherwise add it
+      if (isSelected) {
+        setSelectAllChecked(false); // Uncheck "Select All" since we're removing a client
+        return prev.filter((c) => c.id !== client.id);
+      } else {
+        const newSelected = [...prev, client];
+        // If all clients are now selected, check the "Select All" box
+        if (newSelected.length === clients.length) {
+          setSelectAllChecked(true);
+        }
+        return newSelected;
+      }
+    });
+  };
+
+  const handleSelectAll = (checked: boolean) => {
+    setSelectAllChecked(checked);
+    if (checked) {
+      setSelectedClients(clients);
+    } else {
+      setSelectedClients([]);
+    }
+  };
+
+  const isClientSelected = (client: Client) => {
+    return selectedClients.some((c) => c.id === client.id);
+  };
+
   return (
     <div className="container mx-auto py-6">
       <div className="flex items-center mb-6">
@@ -391,17 +528,17 @@ export default function WhatsAppPage() {
               <QrCode className="h-4 w-4 mr-2" />
               Configuração
             </TabsTrigger>
-            <TabsTrigger value="messages" className="rounded-md">
-              <Send className="h-4 w-4 mr-2" />
-              Mensagens
+            <TabsTrigger value="notifications" className="rounded-md">
+              <Bell className="h-4 w-4 mr-2" />
+              Notificações
             </TabsTrigger>
             <TabsTrigger value="agent" className="rounded-md">
               <Bot className="h-4 w-4 mr-2" />
               Agente de IA
             </TabsTrigger>
-            <TabsTrigger value="notifications" className="rounded-md">
-              <Bell className="h-4 w-4 mr-2" />
-              Notificações
+            <TabsTrigger value="messages" className="rounded-md">
+              <Send className="h-4 w-4 mr-2" />
+              Mensagens
             </TabsTrigger>
           </TabsList>
         </div>
@@ -522,25 +659,131 @@ export default function WhatsAppPage() {
                   Enviar Mensagem
                 </CardTitle>
                 <CardDescription>
-                  Envie uma mensagem para um número de WhatsApp
+                  Envie uma mensagem para clientes
                 </CardDescription>
               </CardHeader>
               <CardContent className="pt-6">
                 <div className="space-y-4">
                   <div>
-                    <label className="text-sm font-medium mb-1 block">
-                      Número de Telefone
-                    </label>
-                    <Input
-                      placeholder="Ex: +55 (11) 99999-9999"
-                      value={phoneNumber}
-                      onChange={(e) =>
-                        setPhoneNumber(formatPhoneNumber(e.target.value))
-                      }
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Digite o número com código do país e DDD
-                    </p>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-sm font-medium block">
+                        Selecionar Clientes
+                      </label>
+                      {selectedClients.length > 0 && (
+                        <Badge variant="secondary">
+                          {selectedClients.length} selecionado(s)
+                        </Badge>
+                      )}
+                    </div>
+
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className="w-full justify-between"
+                          disabled={isLoadingClients}
+                        >
+                          {isLoadingClients ? (
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          ) : selectedClients.length > 0 ? (
+                            <span>
+                              {selectedClients.length} cliente
+                              {selectedClients.length > 1 ? "s" : ""}{" "}
+                              selecionado{selectedClients.length > 1 ? "s" : ""}
+                            </span>
+                          ) : (
+                            <span>Selecionar clientes...</span>
+                          )}
+                          <Users className="ml-auto h-4 w-4 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-full p-0" align="start">
+                        <Command>
+                          <CommandInput
+                            placeholder="Buscar cliente..."
+                            className="h-9"
+                          />
+                          <CommandList>
+                            <CommandEmpty>
+                              Nenhum cliente encontrado.
+                            </CommandEmpty>
+                            <CommandGroup>
+                              <div className="px-2 py-1.5">
+                                <div className="flex items-center space-x-2">
+                                  <Checkbox
+                                    id="select-all"
+                                    checked={selectAllChecked}
+                                    onCheckedChange={handleSelectAll}
+                                  />
+                                  <label
+                                    htmlFor="select-all"
+                                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                                  >
+                                    Selecionar todos
+                                  </label>
+                                </div>
+                              </div>
+                              <CommandSeparator />
+                              {clients.map((client) => (
+                                <CommandItem
+                                  key={client.id}
+                                  onSelect={() => handleSelectClient(client)}
+                                  className="flex items-center justify-between"
+                                >
+                                  <div>
+                                    <span>{client.name}</span>
+                                    <span className="ml-2 text-xs text-muted-foreground">
+                                      {formatPhoneNumber(client.phone)}
+                                    </span>
+                                  </div>
+                                  <div className="flex h-4 w-4 items-center justify-center">
+                                    {isClientSelected(client) && (
+                                      <Check className="h-4 w-4" />
+                                    )}
+                                  </div>
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
+
+                    {selectedClients.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {selectedClients.map((client) => (
+                          <Badge
+                            key={client.id}
+                            variant="secondary"
+                            className="flex items-center gap-1 max-w-full"
+                          >
+                            <span className="truncate text-xs">
+                              {client.name}
+                            </span>
+                            <X
+                              className="h-3 w-3 cursor-pointer"
+                              onClick={() => handleSelectClient(client)}
+                            />
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="mt-4">
+                      <label className="text-sm font-medium mb-1 block">
+                        Ou digite um número manualmente
+                      </label>
+                      <Input
+                        placeholder="Ex: +55 (11) 99999-9999"
+                        value={phoneNumber}
+                        onChange={(e) =>
+                          setPhoneNumber(formatPhoneNumber(e.target.value))
+                        }
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Digite o número com código do país e DDD
+                      </p>
+                    </div>
                   </div>
 
                   <div>
@@ -554,6 +797,27 @@ export default function WhatsAppPage() {
                       rows={5}
                     />
                   </div>
+
+                  {selectedClients.length > 1 && (
+                    <div>
+                      <label className="text-sm font-medium mb-1 block">
+                        Intervalo entre mensagens (ms)
+                      </label>
+                      <Input
+                        type="number"
+                        min={1000}
+                        step={500}
+                        value={messageDelay}
+                        onChange={(e) =>
+                          setMessageDelay(Number(e.target.value))
+                        }
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Tempo de espera entre o envio de cada mensagem
+                        (recomendado: 2000ms)
+                      </p>
+                    </div>
+                  )}
                 </div>
               </CardContent>
               <CardFooter className="border-t bg-muted/50 py-3">
@@ -561,7 +825,10 @@ export default function WhatsAppPage() {
                   className="w-full shadow-sm transition-all hover:shadow"
                   onClick={handleSendMessage}
                   disabled={
-                    !isActive || isSending || !phoneNumber || !messageText
+                    !isActive ||
+                    isSending ||
+                    (!phoneNumber && selectedClients.length === 0) ||
+                    !messageText
                   }
                 >
                   {isSending ? (
@@ -569,7 +836,7 @@ export default function WhatsAppPage() {
                   ) : (
                     <Send className="mr-2 h-4 w-4" />
                   )}
-                  Enviar Mensagem
+                  Enviar Mensagem{selectedClients.length > 1 ? "ns" : ""}
                 </Button>
               </CardFooter>
             </Card>
