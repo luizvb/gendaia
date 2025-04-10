@@ -265,6 +265,8 @@ export async function POST(req: Request) {
       }))
       .reverse();
 
+    console.log("processedMessages", processedMessages);
+
     // Add the latest message from the user if provided
     if (message_text) {
       // If this is a tool call response, don't save to database and format correctly
@@ -320,6 +322,25 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
+
+    console.log(
+      "final",
+      processedMessages.map((m: any) => {
+        // Se o conteúdo já for um array, assumimos que é um toolResult
+        if (Array.isArray(m.content)) {
+          return {
+            role: m.role,
+            content: m.content,
+          };
+        }
+
+        // Caso contrário, é uma mensagem de texto normal
+        return {
+          role: m.role,
+          content: [{ text: m.content }],
+        };
+      })
+    );
 
     const command = new ConverseCommand({
       modelId: "anthropic.claude-3-sonnet-20240229-v1:0",
