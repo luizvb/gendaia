@@ -694,6 +694,408 @@ export async function handleCreateAppointment(
   }
 }
 
+export async function handleListAppointmentsByPhone(
+  businessId: string,
+  input: {
+    client_phone: string;
+    future_only?: boolean;
+  }
+) {
+  try {
+    // Garantir que businessId seja uma string
+    const businessIdStr =
+      typeof businessId === "object"
+        ? (businessId as any).id || JSON.stringify(businessId)
+        : String(businessId);
+
+    // Normalizar o telefone (remover caracteres não numéricos)
+    const normalizedPhone = input.client_phone.replace(/\D/g, "");
+
+    if (normalizedPhone.length < 8) {
+      throw new Error("Número de telefone inválido. Forneça um número válido.");
+    }
+
+    // Construir URL para a API de agendamentos
+    const queryParams = new URLSearchParams();
+    queryParams.append("phone", normalizedPhone);
+
+    const baseUrl = getBaseUrl();
+    const url = `${baseUrl}/api/appointments?${queryParams.toString()}`;
+
+    console.log(`🔍 Buscando agendamentos para o telefone: ${normalizedPhone}`);
+
+    // Fazer requisição para a API
+    const response = await fetch(url, {
+      headers: {
+        "X-Business-ID": businessIdStr,
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Erro ao buscar agendamentos: ${errorText}`);
+    }
+
+    let appointments = await response.json();
+
+    // Filtrar apenas agendamentos futuros se solicitado
+    if (input.future_only) {
+      const now = new Date();
+      appointments = appointments.filter((appointment: any) => {
+        const appointmentDate = new Date(appointment.start_time);
+        return appointmentDate > now;
+      });
+
+      // Ordenar por data (do mais próximo para o mais distante)
+      appointments.sort((a: any, b: any) => {
+        return (
+          new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
+        );
+      });
+    }
+
+    // Formatar a resposta para ser mais amigável
+    const formattedAppointments = appointments.map((appointment: any) => {
+      const startTime = new Date(appointment.start_time);
+      const formattedDate = startTime.toLocaleDateString("pt-BR");
+      const formattedTime = startTime.toLocaleTimeString("pt-BR", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+
+      return {
+        id: appointment.id,
+        data: formattedDate,
+        hora: formattedTime,
+        servico: appointment.services?.name || "Serviço não especificado",
+        profissional:
+          appointment.professionals?.name || "Profissional não especificado",
+        status: appointment.status || "agendado",
+        cliente: appointment.clients?.name || "Cliente não especificado",
+        telefone: appointment.clients?.phone || input.client_phone,
+      };
+    });
+
+    return {
+      json: {
+        appointments: formattedAppointments,
+        total: formattedAppointments.length,
+      },
+    };
+  } catch (error) {
+    throw new Error(
+      `Erro ao buscar agendamentos: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
+  }
+}
+
+export async function handleCancelAppointment(
+  businessId: string,
+  input: {
+    appointment_id: string;
+    reason?: string;
+  }
+) {
+  try {
+    // Garantir que businessId seja uma string
+    const businessIdStr =
+      typeof businessId === "object"
+        ? (businessId as any).id || JSON.stringify(businessId)
+        : String(businessId);
+
+    if (!input.appointment_id) {
+      throw new Error("ID do agendamento é obrigatório para cancelamento");
+    }
+
+    // Construir URL para a API de cancelamento
+    const queryParams = new URLSearchParams();
+    queryParams.append("id", input.appointment_id);
+
+    const baseUrl = getBaseUrl();
+    const url = `${baseUrl}/api/appointments?${queryParams.toString()}`;
+
+    console.log(`🗑️ Cancelando agendamento: ${input.appointment_id}`);
+
+    // Fazer requisição DELETE para a API
+    const response = await fetch(url, {
+      method: "DELETE",
+      headers: {
+        "X-Business-ID": businessIdStr,
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Erro ao cancelar agendamento: ${errorText}`);
+    }
+
+    const result = await response.json();
+
+    // Invalidar caches
+    try {
+      invalidateCacheTags([CacheTags.APPOINTMENTS, CacheTags.DASHBOARD]);
+      invalidateSimpleCache(`appointments-${businessIdStr}-phone-`);
+      invalidateSimpleCache(`dashboard-${businessIdStr}-daily`);
+      invalidateSimpleCache(`dashboard-${businessIdStr}-weekly`);
+      invalidateSimpleCache(`dashboard-${businessIdStr}-monthly`);
+    } catch (error) {
+      console.error("Error invalidating cache:", error);
+    }
+
+    return {
+      json: {
+        success: true,
+        message: "Agendamento cancelado com sucesso",
+        reason: input.reason || "Cancelamento solicitado pelo cliente",
+      },
+    };
+  } catch (error) {
+    throw new Error(
+      `Erro ao cancelar agendamento: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
+  }
+}
+
+export async function handleUpdateAppointment(
+  businessId: string,
+  input: {
+    appointment_id: string;
+    service_id?: string;
+    professional_id?: string;
+    date?: string;
+    time?: string;
+    notes?: string;
+  }
+) {
+  try {
+    // Garantir que businessId seja uma string
+    const businessIdStr =
+      typeof businessId === "object"
+        ? (businessId as any).id || JSON.stringify(businessId)
+        : String(businessId);
+
+    if (!input.appointment_id) {
+      throw new Error("ID do agendamento é obrigatório para atualização");
+    }
+
+    // Verificar se pelo menos um campo para atualização foi fornecido
+    if (
+      !input.service_id &&
+      !input.professional_id &&
+      !input.date &&
+      !input.time &&
+      !input.notes
+    ) {
+      throw new Error(
+        "Pelo menos um campo para atualização deve ser fornecido"
+      );
+    }
+
+    // Primeiro, buscar o agendamento atual para ter os dados completos
+    const baseUrl = getBaseUrl();
+    const getUrl = `${baseUrl}/api/appointments/${input.appointment_id}`;
+
+    console.log(
+      `🔍 Buscando dados atuais do agendamento: ${input.appointment_id}`
+    );
+
+    // Buscar agendamento atual
+    const getResponse = await fetch(getUrl, {
+      headers: {
+        "X-Business-ID": businessIdStr,
+      },
+    });
+
+    if (!getResponse.ok) {
+      const errorText = await getResponse.text();
+      throw new Error(`Erro ao buscar agendamento: ${errorText}`);
+    }
+
+    const currentAppointment = await getResponse.json();
+
+    // Preparar dados para atualização
+    const updateData: any = {};
+
+    // Verificar e converter serviceId se for um nome em vez de UUID
+    if (input.service_id) {
+      let serviceIdToUse = input.service_id;
+      if (
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          serviceIdToUse
+        )
+      ) {
+        // Buscar o serviço pelo nome
+        const servicesUrl = `${baseUrl}/api/services`;
+        const servicesResponse = await fetch(servicesUrl, {
+          headers: {
+            "X-Business-ID": businessIdStr,
+          },
+        });
+
+        if (servicesResponse.ok) {
+          const services = await servicesResponse.json();
+          const matchedService = services.find(
+            (s: any) => s.name.toLowerCase() === serviceIdToUse.toLowerCase()
+          );
+
+          if (matchedService) {
+            serviceIdToUse = matchedService.id;
+          } else {
+            throw new Error(`Serviço não encontrado: ${serviceIdToUse}`);
+          }
+        }
+      }
+      updateData.service_id = serviceIdToUse;
+    }
+
+    // Verificar e converter professionalId se for um nome em vez de UUID
+    if (input.professional_id) {
+      let professionalIdToUse = input.professional_id;
+      if (
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          professionalIdToUse
+        )
+      ) {
+        // Buscar o profissional pelo nome
+        const professionalsUrl = `${baseUrl}/api/professionals`;
+        const professionalsResponse = await fetch(professionalsUrl, {
+          headers: {
+            "X-Business-ID": businessIdStr,
+          },
+        });
+
+        if (professionalsResponse.ok) {
+          const professionals = await professionalsResponse.json();
+          const matchedProfessional = professionals.find(
+            (p: any) =>
+              p.name.toLowerCase() === professionalIdToUse.toLowerCase()
+          );
+
+          if (matchedProfessional) {
+            professionalIdToUse = matchedProfessional.id;
+          } else {
+            throw new Error(
+              `Profissional não encontrado: ${professionalIdToUse}`
+            );
+          }
+        }
+      }
+      updateData.professional_id = professionalIdToUse;
+    }
+
+    // Lidar com data e hora
+    let startTime: Date | null = null;
+    const dateToUse = input.date || currentAppointment.start_time.split("T")[0];
+
+    if (input.time) {
+      // Se um novo horário foi fornecido, atualizar o start_time
+      startTime = new Date(`${dateToUse}T${input.time}:00`);
+      updateData.start_time = startTime.toISOString();
+
+      // Calcular end_time baseado na duração do serviço
+      const serviceId = updateData.service_id || currentAppointment.service_id;
+      const servicesUrl = `${baseUrl}/api/services/${serviceId}`;
+      const servicesResponse = await fetch(servicesUrl, {
+        headers: {
+          "X-Business-ID": businessIdStr,
+        },
+      });
+
+      if (servicesResponse.ok) {
+        const service = await servicesResponse.json();
+        const durationMinutes = service.duration || 60; // Default to 60 minutes if not specified
+
+        const endTime = new Date(startTime.getTime() + durationMinutes * 60000);
+        updateData.end_time = endTime.toISOString();
+      } else {
+        // Se não conseguir obter a duração, use o padrão de 1 hora
+        const endTime = new Date(startTime.getTime() + 60 * 60000);
+        updateData.end_time = endTime.toISOString();
+      }
+    } else if (input.date) {
+      // Se só a data foi alterada mas não o horário
+      const currentTime = currentAppointment.start_time
+        .split("T")[1]
+        .substring(0, 5);
+      startTime = new Date(`${dateToUse}T${currentTime}:00`);
+      updateData.start_time = startTime.toISOString();
+
+      // Recalcular end_time mantendo a mesma duração
+      const currentStartTime = new Date(currentAppointment.start_time);
+      const currentEndTime = new Date(currentAppointment.end_time);
+      const durationMs = currentEndTime.getTime() - currentStartTime.getTime();
+
+      const endTime = new Date(startTime.getTime() + durationMs);
+      updateData.end_time = endTime.toISOString();
+    }
+
+    // Incluir notas se fornecidas
+    if (input.notes !== undefined) {
+      updateData.notes = input.notes;
+    }
+
+    // Atualizar o agendamento
+    const updateUrl = `${baseUrl}/api/appointments/${input.appointment_id}`;
+
+    console.log(
+      `✏️ Atualizando agendamento: ${input.appointment_id}`,
+      updateData
+    );
+
+    const updateResponse = await fetch(updateUrl, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Business-ID": businessIdStr,
+      },
+      body: JSON.stringify(updateData),
+    });
+
+    if (!updateResponse.ok) {
+      const errorText = await updateResponse.text();
+      throw new Error(`Erro ao atualizar agendamento: ${errorText}`);
+    }
+
+    const result = await updateResponse.json();
+
+    // Invalidar caches
+    try {
+      invalidateCacheTags([CacheTags.APPOINTMENTS, CacheTags.DASHBOARD]);
+      invalidateSimpleCache(`appointments-${businessIdStr}-phone-`);
+      invalidateSimpleCache(`dashboard-${businessIdStr}-daily`);
+      invalidateSimpleCache(`dashboard-${businessIdStr}-weekly`);
+      invalidateSimpleCache(`dashboard-${businessIdStr}-monthly`);
+    } catch (error) {
+      console.error("Error invalidating cache:", error);
+    }
+
+    // Formatar resposta com informações sobre o que foi atualizado
+    const updates: string[] = [];
+    if (input.service_id) updates.push("serviço");
+    if (input.professional_id) updates.push("profissional");
+    if (input.date || input.time) updates.push("data/horário");
+    if (input.notes) updates.push("observações");
+
+    return {
+      json: {
+        success: true,
+        message: `Agendamento atualizado com sucesso (${updates.join(", ")})`,
+        appointment_id: input.appointment_id,
+      },
+    };
+  } catch (error) {
+    throw new Error(
+      `Erro ao atualizar agendamento: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
+  }
+}
+
 export async function handleToolCalls(
   toolUse: ToolUse,
   businessId: string
@@ -733,6 +1135,18 @@ export async function handleToolCalls(
 
       case "createAppointment":
         content = await handleCreateAppointment(businessId, input);
+        break;
+
+      case "listAppointmentsByPhone":
+        content = await handleListAppointmentsByPhone(businessId, input);
+        break;
+
+      case "cancelAppointment":
+        content = await handleCancelAppointment(businessId, input);
+        break;
+
+      case "updateAppointment":
+        content = await handleUpdateAppointment(businessId, input);
         break;
 
       default:

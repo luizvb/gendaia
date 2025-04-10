@@ -134,6 +134,36 @@ GUIA DE FERRAMENTAS COM EXEMPLOS:
    - Resposta: "Ótimo! Seu agendamento foi confirmado. Esperamos você no dia [data] às [hora]."
    NOTA: Para maior eficiência, é melhor usar os IDs obtidos anteriormente, mas também é possível usar os nomes diretamente.
 
+6. listAppointmentsByPhone
+   Descrição: Lista todos os agendamentos de um cliente pelo número de telefone
+   Quando usar: Quando o cliente pedir para verificar, consultar ou listar seus agendamentos
+   IMPORTANTE: É necessário fornecer o telefone do cliente para esta ferramenta
+   Exemplo de uso:
+   - Usuário: "Quero ver meus agendamentos" ou "Quais horários tenho marcados?"
+   - Ação: Use listAppointmentsByPhone com client_phone="11999998888" (o telefone do cliente), future_only=true (para mostrar apenas agendamentos futuros)
+   - Resposta: "Você tem os seguintes agendamentos: Dia 10/05 às 14:00 - Serviço X com Profissional Y, Dia 15/05 às 10:00 - Serviço Z com Profissional W"
+
+7. cancelAppointment
+   Descrição: Cancela um agendamento específico
+   Quando usar: Quando o cliente solicitar o cancelamento de um agendamento
+   IMPORTANTE: É necessário o ID do agendamento, que pode ser obtido com listAppointmentsByPhone
+   Exemplo de uso:
+   - Usuário: "Quero cancelar meu horário de amanhã"
+   - Ação: Primeiro use listAppointmentsByPhone para obter o ID do agendamento
+   - Depois use cancelAppointment com appointment_id="123e4567-e89b-12d3-a456-426614174000", reason="Solicitação do cliente"
+   - Resposta: "Seu agendamento para [data] às [hora] foi cancelado com sucesso."
+
+8. updateAppointment
+   Descrição: Atualiza um agendamento existente
+   Quando usar: Quando o cliente solicitar uma alteração em um agendamento existente
+   IMPORTANTE: É necessário o ID do agendamento, que pode ser obtido com listAppointmentsByPhone
+   Exemplo de uso:
+   - Usuário: "Preciso mudar meu horário de amanhã para sexta-feira"
+   - Ação: Primeiro use listAppointmentsByPhone para obter o ID do agendamento
+   - Depois use updateAppointment com appointment_id="123e4567-e89b-12d3-a456-426614174000", date="2023-05-12" (a nova data desejada)
+   - Resposta: "Seu agendamento foi alterado com sucesso para sexta-feira, 12/05, às 14:00."
+   NOTA: Você pode atualizar apenas os campos necessários: serviço, profissional, data, horário ou observações.
+
 IMPORTANTE - FLUXO CORRETO PASSO A PASSO:
 1. Use validateAppointment para validar os dados do agendamento
 2. Apresente ao cliente os detalhes do agendamento validado
@@ -328,6 +358,94 @@ export async function POST(req: Request) {
                     "client_name",
                     "client_phone",
                   ],
+                  additionalProperties: false,
+                },
+              },
+            },
+          },
+          {
+            toolSpec: {
+              name: "listAppointmentsByPhone",
+              description:
+                "Lista todos os agendamentos de um cliente pelo telefone",
+              inputSchema: {
+                json: {
+                  type: "object",
+                  properties: {
+                    client_phone: {
+                      type: "string",
+                      description:
+                        "Telefone do cliente no formato nacional (ex: 11999998888)",
+                    },
+                    future_only: {
+                      type: "boolean",
+                      description:
+                        "Se true, retorna apenas agendamentos futuros",
+                    },
+                  },
+                  required: ["client_phone"],
+                  additionalProperties: false,
+                },
+              },
+            },
+          },
+          {
+            toolSpec: {
+              name: "cancelAppointment",
+              description: "Cancela um agendamento específico",
+              inputSchema: {
+                json: {
+                  type: "object",
+                  properties: {
+                    appointment_id: {
+                      type: "string",
+                      description: "ID do agendamento a ser cancelado",
+                    },
+                    reason: {
+                      type: "string",
+                      description: "Motivo do cancelamento (opcional)",
+                    },
+                  },
+                  required: ["appointment_id"],
+                  additionalProperties: false,
+                },
+              },
+            },
+          },
+          {
+            toolSpec: {
+              name: "updateAppointment",
+              description: "Atualiza um agendamento existente",
+              inputSchema: {
+                json: {
+                  type: "object",
+                  properties: {
+                    appointment_id: {
+                      type: "string",
+                      description: "ID do agendamento a ser atualizado",
+                    },
+                    service_id: {
+                      type: "string",
+                      description: "ID ou nome do novo serviço (opcional)",
+                    },
+                    professional_id: {
+                      type: "string",
+                      description: "ID ou nome do novo profissional (opcional)",
+                    },
+                    date: {
+                      type: "string",
+                      description: "Nova data no formato YYYY-MM-DD (opcional)",
+                    },
+                    time: {
+                      type: "string",
+                      description: "Novo horário no formato HH:MM (opcional)",
+                    },
+                    notes: {
+                      type: "string",
+                      description: "Novas observações (opcional)",
+                    },
+                  },
+                  required: ["appointment_id"],
                   additionalProperties: false,
                 },
               },

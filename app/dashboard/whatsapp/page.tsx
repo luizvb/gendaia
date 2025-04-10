@@ -27,6 +27,8 @@ import {
   Check,
   X,
   Users,
+  ChevronDown,
+  Menu,
 } from "lucide-react";
 import Image from "next/image";
 import { Input } from "@/components/ui/input";
@@ -58,6 +60,13 @@ import {
 } from "@/components/ui/command";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useMediaQuery } from "../../hooks/use-media-query";
 
 interface Message {
   id: string;
@@ -134,6 +143,8 @@ export default function WhatsAppPage() {
     });
   const { toast } = useToast();
   const whatsappService = new WhatsAppService();
+  const [activeTab, setActiveTab] = useState("config");
+  const isMobile = useMediaQuery("(max-width: 640px)");
 
   useEffect(() => {
     const fetchBusinessData = async () => {
@@ -518,33 +529,72 @@ export default function WhatsAppPage() {
         <h1 className="text-3xl font-bold">WhatsApp</h1>
       </div>
 
-      <Tabs
-        defaultValue="config"
-        className="bg-card rounded-lg shadow-sm border"
-      >
+      <div className="bg-card rounded-lg shadow-sm border">
         <div className="px-4 pt-4">
-          <TabsList className="mb-4 grid w-full grid-cols-4 p-1">
-            <TabsTrigger value="config" className="rounded-md">
-              <QrCode className="h-4 w-4 mr-2" />
-              Configuração
-            </TabsTrigger>
-            <TabsTrigger value="notifications" className="rounded-md">
-              <Bell className="h-4 w-4 mr-2" />
-              Notificações
-            </TabsTrigger>
-            <TabsTrigger value="agent" className="rounded-md">
-              <Bot className="h-4 w-4 mr-2" />
-              Agente de IA
-            </TabsTrigger>
-            <TabsTrigger value="messages" className="rounded-md">
-              <Send className="h-4 w-4 mr-2" />
-              Mensagens
-            </TabsTrigger>
-          </TabsList>
+          {isMobile ? (
+            <div className="flex justify-between items-center mb-4">
+              <div className="text-lg font-medium">
+                {activeTab === "config" && "Configuração"}
+                {activeTab === "notifications" && "Notificações"}
+                {activeTab === "agent" && "Agente de IA"}
+                {activeTab === "messages" && "Mensagens"}
+              </div>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    <Menu className="h-4 w-4 mr-2" />
+                    Seções
+                    <ChevronDown className="h-4 w-4 ml-2" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => setActiveTab("config")}>
+                    <QrCode className="h-4 w-4 mr-2" />
+                    Configuração
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => setActiveTab("notifications")}
+                  >
+                    <Bell className="h-4 w-4 mr-2" />
+                    Notificações
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setActiveTab("agent")}>
+                    <Bot className="h-4 w-4 mr-2" />
+                    Agente de IA
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setActiveTab("messages")}>
+                    <Send className="h-4 w-4 mr-2" />
+                    Mensagens
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          ) : (
+            <Tabs value={activeTab} onValueChange={setActiveTab}>
+              <TabsList className="mb-4 grid w-full grid-cols-4 p-1">
+                <TabsTrigger value="config" className="rounded-md">
+                  <QrCode className="h-4 w-4 mr-2" />
+                  Configuração
+                </TabsTrigger>
+                <TabsTrigger value="notifications" className="rounded-md">
+                  <Bell className="h-4 w-4 mr-2" />
+                  Notificações
+                </TabsTrigger>
+                <TabsTrigger value="agent" className="rounded-md">
+                  <Bot className="h-4 w-4 mr-2" />
+                  Agente de IA
+                </TabsTrigger>
+                <TabsTrigger value="messages" className="rounded-md">
+                  <Send className="h-4 w-4 mr-2" />
+                  Mensagens
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+          )}
         </div>
 
-        <TabsContent value="config">
-          <Card>
+        {activeTab === "config" && (
+          <Card className="border-0 shadow-none">
             <CardHeader>
               <CardTitle>Configuração do WhatsApp</CardTitle>
               <CardDescription>
@@ -648,10 +698,10 @@ export default function WhatsAppPage() {
               )}
             </CardFooter>
           </Card>
-        </TabsContent>
+        )}
 
-        <TabsContent value="messages">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {activeTab === "messages" && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 p-4">
             <Card className="md:col-span-1">
               <CardHeader className="bg-muted/50 border-b">
                 <CardTitle className="flex items-center">
@@ -893,10 +943,10 @@ export default function WhatsAppPage() {
               </CardContent>
             </Card>
           </div>
-        </TabsContent>
+        )}
 
-        <TabsContent value="agent">
-          <Card>
+        {activeTab === "agent" && (
+          <Card className="border-0 shadow-none">
             <CardHeader>
               <CardTitle className="flex items-center">
                 <Bot className="h-5 w-5 text-blue-500 dark:text-blue-400 mr-2" />
@@ -1186,10 +1236,10 @@ export default function WhatsAppPage() {
               )}
             </CardFooter>
           </Card>
-        </TabsContent>
+        )}
 
-        <TabsContent value="notifications">
-          <Card>
+        {activeTab === "notifications" && (
+          <Card className="border-0 shadow-none">
             <CardHeader>
               <CardTitle className="flex items-center">
                 <Bell className="h-5 w-5 text-blue-500 dark:text-blue-400 mr-2" />
@@ -1364,8 +1414,8 @@ export default function WhatsAppPage() {
               )}
             </CardFooter>
           </Card>
-        </TabsContent>
-      </Tabs>
+        )}
+      </div>
     </div>
   );
 }
