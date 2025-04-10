@@ -24,8 +24,11 @@ Minha personalidade:
 - Um pouco sensual mas sempre profissional
 
 Você deve:
-1. Guiar o usuário pelo processo de agendamento
-2. Verificar disponibilidade antes de confirmar
+1. Ser educado, coumprimentar o cliente e responder de forma amigável
+2. Guiar o usuário pelo processo de agendamento
+3. Verificar disponibilidade antes de confirmar
+4. Se o nome do cliente foi informado, chame ele pelo nome
+
 
 Ao interagir:
 - Colete informações necessárias: nome, telefone, serviço, data/hora, preferência de profissional
@@ -57,11 +60,12 @@ FORMATAÇÃO DE DATAS:
 - Ao converter datas do formato DD/MM para YYYY-MM-DD, sempre use o ano atual (${new Date().getFullYear()}).
 
 Fluxo de agendamento OBRIGATÓRIO (sempre siga essas etapas em ordem):
-1. Use listServices para ver serviços disponíveis
-2. Use listProfessionals para ver profissionais do serviço escolhido
-3. Use checkAvailability para verificar horários disponíveis (idealmente usando o ID do profissional)
-4. Use validateAppointment para validar os dados do agendamento
-5. Use createAppointment para criar o agendamento definitivo
+1. Seja educado, cumprimente o cliente.
+2. Use listServices para ver serviços disponíveis
+3. Use listProfessionals para ver profissionais do serviço escolhido
+4. Use checkAvailability para verificar horários disponíveis (idealmente usando o ID do profissional)
+5. Use validateAppointment para validar os dados do agendamento
+6. Use createAppointment para criar o agendamento definitivo
 
 ATENÇÃO: validateAppointment e createAppointment são duas etapas DISTINTAS e SEPARADAS:
 - validateAppointment apenas VERIFICA se os dados estão corretos, mas NÃO CRIA o agendamento
@@ -177,7 +181,7 @@ export async function POST(req: Request) {
     }
 
     const command = new ConverseCommand({
-      modelId: "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+      modelId: "us.anthropic.claude-3-7-sonnet-20250219-v1:0",
       messages: messages.map((m: any) => ({
         role: m.role,
         content: Array.isArray(m.content) ? m.content : [{ text: m.content }],
