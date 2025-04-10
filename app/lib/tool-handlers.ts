@@ -624,15 +624,19 @@ export async function handleCreateAppointment(
     );
 
     // Preparar dados para o body da requisição
+    // Usar string de data formatada diretamente no formato ISO 8601
+    // Isso preserva a data exata que o usuário especificou sem conversão de timezone
+    const dateStr = input.date || new Date().toISOString().split("T")[0];
+    const timeStr = input.time || "00:00";
+    const isoDateTimeStr = `${dateStr}T${timeStr}:00`;
+
     const appointmentData = {
       business_id: businessIdStr,
       service_id: serviceIdToUse,
       professional_id: professionalIdToUse,
       client_name: input.client_name,
       client_phone: clientPhoneToUse,
-      start_time: `${input.date || new Date().toISOString().split("T")[0]}T${
-        input.time
-      }:00`,
+      start_time: isoDateTimeStr, // Formato ISO sem conversão de timezone
       notes: input.notes || "",
     };
 
@@ -988,13 +992,14 @@ export async function handleUpdateAppointment(
     }
 
     // Lidar com data e hora
-    let startTime: Date | null = null;
     const dateToUse = input.date || currentAppointment.start_time.split("T")[0];
 
     if (input.time) {
       // Se um novo horário foi fornecido, atualizar o start_time
-      startTime = new Date(`${dateToUse}T${input.time}:00`);
-      updateData.start_time = startTime.toISOString();
+      // Usar string diretamente no formato ISO 8601 para evitar conversão de timezone
+      const timeStr = input.time;
+      const isoDateTimeStr = `${dateToUse}T${timeStr}:00`;
+      updateData.start_time = isoDateTimeStr;
 
       // Calcular end_time baseado na duração do serviço
       const serviceId = updateData.service_id || currentAppointment.service_id;
@@ -1009,28 +1014,67 @@ export async function handleUpdateAppointment(
         const service = await servicesResponse.json();
         const durationMinutes = service.duration || 60; // Default to 60 minutes if not specified
 
-        const endTime = new Date(startTime.getTime() + durationMinutes * 60000);
-        updateData.end_time = endTime.toISOString();
+        // Criar um objeto Date temporário para calcular a duração
+        const tempStartTime = new Date(`${dateToUse}T${input.time}:00`);
+        const endTime = new Date(
+          tempStartTime.getTime() + durationMinutes * 60000
+        );
+
+        // Formatar a data final como string ISO
+        const endTimeISO = `${dateToUse}T${endTime
+          .getHours()
+          .toString()
+          .padStart(2, "0")}:${endTime
+          .getMinutes()
+          .toString()
+          .padStart(2, "0")}:00`;
+        updateData.end_time = endTimeISO;
       } else {
         // Se não conseguir obter a duração, use o padrão de 1 hora
-        const endTime = new Date(startTime.getTime() + 60 * 60000);
-        updateData.end_time = endTime.toISOString();
+        // Criar um objeto Date temporário para calcular a duração
+        const tempStartTime = new Date(`${dateToUse}T${input.time}:00`);
+        const endTime = new Date(tempStartTime.getTime() + 60 * 60000);
+
+        // Formatar a data final como string ISO
+        const endTimeISO = `${dateToUse}T${endTime
+          .getHours()
+          .toString()
+          .padStart(2, "0")}:${endTime
+          .getMinutes()
+          .toString()
+          .padStart(2, "0")}:00`;
+        updateData.end_time = endTimeISO;
       }
     } else if (input.date) {
       // Se só a data foi alterada mas não o horário
       const currentTime = currentAppointment.start_time
         .split("T")[1]
         .substring(0, 5);
-      startTime = new Date(`${dateToUse}T${currentTime}:00`);
-      updateData.start_time = startTime.toISOString();
 
-      // Recalcular end_time mantendo a mesma duração
+      // Usar formato string diretamente para evitar problemas de timezone
+      updateData.start_time = `${dateToUse}T${currentTime}:00`;
+
+      // Para o horário de término, vamos extrair os minutos da duração atual
       const currentStartTime = new Date(currentAppointment.start_time);
       const currentEndTime = new Date(currentAppointment.end_time);
-      const durationMs = currentEndTime.getTime() - currentStartTime.getTime();
+      const durationMinutes = Math.round(
+        (currentEndTime.getTime() - currentStartTime.getTime()) / 60000
+      );
 
-      const endTime = new Date(startTime.getTime() + durationMs);
-      updateData.end_time = endTime.toISOString();
+      // Calcular o horário de término usando uma data temporária
+      const tempStartTime = new Date(`${dateToUse}T${currentTime}:00`);
+      const endTime = new Date(
+        tempStartTime.getTime() + durationMinutes * 60000
+      );
+
+      // Formatar a data final como string ISO
+      updateData.end_time = `${dateToUse}T${endTime
+        .getHours()
+        .toString()
+        .padStart(2, "0")}:${endTime
+        .getMinutes()
+        .toString()
+        .padStart(2, "0")}:00`;
     }
 
     // Incluir notas se fornecidas
