@@ -260,7 +260,7 @@ export async function POST(req: Request) {
     // Create the messages array from whatsapp_messages
     let processedMessages = whatsappMessages
       .map((msg) => ({
-        role: msg.direction === "outbound" ? "assistant" : "user",
+        role: msg.direction === "outgoing" ? "assistant" : "user",
         content: msg.message,
       }))
       .reverse();
@@ -290,7 +290,7 @@ export async function POST(req: Request) {
         const userMessageToSave = {
           business_id: businessId,
           phone_number: client_phone,
-          direction: "inbound",
+          direction: "incoming",
           message: message_text,
           created_at: new Date().toISOString(),
         };
