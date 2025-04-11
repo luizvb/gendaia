@@ -11,10 +11,35 @@ import { Suspense } from "react";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Gendaia - AI que agenda!",
+  title: "Gendaia - Atendimento por IA e Agenda Inteligente",
   description:
-    "Plataforma elegante e minimalista para gerenciar agendamentos de serviços com Inteligência Artificial",
+    "A solução definitiva que combina atendimento automatizado via WhatsApp com gerenciamento inteligente de agenda para médicos, dentistas, salões, petshops e clínicas veterinárias.",
   manifest: "/manifest.json",
+  keywords: [
+    "agendamento online",
+    "atendimento automatizado",
+    "WhatsApp",
+    "inteligência artificial",
+    "clínicas",
+    "salões",
+    "petshops",
+    "barbearias",
+    "veterinária",
+  ],
+  authors: [{ name: "Gendaia" }],
+  openGraph: {
+    type: "website",
+    title: "Gendaia - Atendimento por IA e Agenda Inteligente",
+    description:
+      "A melhor solução de WhatsApp + IA do mercado para gerenciamento de agendamentos e atendimento automatizado.",
+    siteName: "Gendaia",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Gendaia - Atendimento por IA e Agenda Inteligente",
+    description:
+      "A melhor solução de WhatsApp + IA do mercado para gerenciamento de agendamentos e atendimento automatizado.",
+  },
   icons: {
     icon: [
       { url: "/favicon.ico" },

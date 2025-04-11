@@ -1,6 +1,27 @@
 import type React from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Gendaia - Acesso à Plataforma",
+  description:
+    "Acesse a plataforma Gendaia para gerenciar agendamentos e seu atendimento automatizado via WhatsApp com Inteligência Artificial.",
+  keywords: [
+    "login",
+    "registro",
+    "acesso",
+    "conta",
+    "autenticação",
+    "plataforma de agendamento",
+  ],
+  openGraph: {
+    title: "Gendaia - Acesso à Plataforma",
+    description:
+      "Acesse a melhor plataforma de agendamentos com integração de IA e WhatsApp do mercado.",
+    type: "website",
+  },
+};
 
 export default function AuthLayout({
   children,

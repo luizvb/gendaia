@@ -1,8 +1,28 @@
 import type React from "react";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-
+import { Metadata } from "next";
 import { Button } from "@/components/ui/button";
+
+export const metadata: Metadata = {
+  title: "Gendaia - Agendamento Online",
+  description:
+    "Agende seu horário online de forma rápida e prática. Escolha o serviço, profissional, data e horário disponíveis.",
+  keywords: [
+    "agendamento online",
+    "marcar horário",
+    "reserva de serviços",
+    "consulta",
+    "atendimento",
+    "disponibilidade",
+  ],
+  openGraph: {
+    title: "Gendaia - Agendamento Online",
+    description:
+      "Agende seu horário online de forma rápida e prática. Agendamento disponível 24 horas por dia, 7 dias por semana.",
+    type: "website",
+  },
+};
 
 export default function BookingLayout({
   children,

@@ -1,6 +1,27 @@
 import type React from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Gendaia - Configuração Inicial",
+  description:
+    "Configure seu negócio na Gendaia em poucos passos. Plataforma completa para agendamentos e atendimento automatizado via WhatsApp com IA.",
+  keywords: [
+    "onboarding",
+    "configuração",
+    "agendamento",
+    "setup",
+    "assistente virtual",
+    "integração WhatsApp",
+  ],
+  openGraph: {
+    title: "Gendaia - Configuração Inicial",
+    description:
+      "Configure seu negócio na Gendaia em poucos passos. Plataforma completa para agendamentos.",
+    type: "website",
+  },
+};
 
 export default function OnboardingLayout({
   children,
