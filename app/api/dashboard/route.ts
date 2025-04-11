@@ -12,6 +12,9 @@ interface DashboardResponse {
     clients: { count: number; change: number };
     services: { count: number; change: number };
     revenue: { total: number; change: number };
+    professionals: { count: number }; // Total de profissionais
+    topProfessional: { id: string; name: string; count: number } | null; // Profissional com mais atendimentos
+    topClient: { id: string; name: string; count: number } | null; // Cliente com mais atendimentos
   };
   recentAppointments: any[];
   professionals: any[]; // Alterado para aceitar qualquer formato de profissionais
@@ -25,6 +28,16 @@ interface DashboardResponse {
       name: string;
       count: number;
       percentage: number;
+    }>;
+    topProfessionals: Array<{
+      id: string;
+      name: string;
+      count: number;
+    }>;
+    topClients: Array<{
+      id: string;
+      name: string;
+      count: number;
     }>;
   };
 }
@@ -92,6 +105,8 @@ export const GET = async (request: NextRequest) => {
 
     const { searchParams } = new URL(request.url);
     const period = searchParams.get("period") || "daily"; // daily, weekly, monthly
+    const startDateParam = searchParams.get("startDate");
+    const endDateParam = searchParams.get("endDate");
 
     // Get the business_id using our utility function
     const businessId = await getBusinessId(request);
@@ -105,30 +120,40 @@ export const GET = async (request: NextRequest) => {
     // Get current date
     const now = new Date();
     let startDate: Date;
-    let endDate = new Date(now);
+    let endDate: Date;
 
-    // Set time to end of day
-    endDate.setHours(23, 59, 59, 999);
+    if (startDateParam && endDateParam) {
+      // Use provided date range if available
+      startDate = new Date(startDateParam);
+      startDate.setHours(0, 0, 0, 0);
 
-    // Calculate start date based on period
-    switch (period) {
-      case "daily":
-        startDate = new Date(now);
-        startDate.setHours(0, 0, 0, 0);
-        break;
-      case "weekly":
-        startDate = new Date(now);
-        startDate.setDate(now.getDate() - 7);
-        startDate.setHours(0, 0, 0, 0);
-        break;
-      case "monthly":
-        startDate = new Date(now);
-        startDate.setMonth(now.getMonth() - 1);
-        startDate.setHours(0, 0, 0, 0);
-        break;
-      default:
-        startDate = new Date(now);
-        startDate.setHours(0, 0, 0, 0);
+      endDate = new Date(endDateParam);
+      endDate.setHours(23, 59, 59, 999);
+    } else {
+      // Fall back to calculated dates based on period
+      endDate = new Date(now);
+      endDate.setHours(23, 59, 59, 999);
+
+      // Calculate start date based on period
+      switch (period) {
+        case "daily":
+          startDate = new Date(now);
+          startDate.setHours(0, 0, 0, 0);
+          break;
+        case "weekly":
+          startDate = new Date(now);
+          startDate.setDate(now.getDate() - 7);
+          startDate.setHours(0, 0, 0, 0);
+          break;
+        case "monthly":
+          startDate = new Date(now);
+          startDate.setMonth(now.getMonth() - 1);
+          startDate.setHours(0, 0, 0, 0);
+          break;
+        default:
+          startDate = new Date(now);
+          startDate.setHours(0, 0, 0, 0);
+      }
     }
 
     // Format dates for Postgres
@@ -205,10 +230,11 @@ export const GET = async (request: NextRequest) => {
       .limit(5);
 
     // Get professionals
-    const { data: professionalsData } = await supabase
-      .from("professionals")
-      .select("id, name")
-      .eq("business_id", businessId);
+    const { data: professionalsData, count: professionalsCount } =
+      await supabase
+        .from("professionals")
+        .select("id, name", { count: "exact" })
+        .eq("business_id", businessId);
 
     // Formatar os profissionais para o formato esperado
     const professionals = professionalsData
@@ -336,15 +362,33 @@ export const GET = async (request: NextRequest) => {
       .lte("start_time", endDateStr);
 
     // Process daily stats
-    const dailyStats = dailyStatsData?.reduce((acc: any, appointment) => {
-      const date = new Date(appointment.start_time).toISOString().split("T")[0];
-      if (!acc[date]) {
-        acc[date] = { appointments: 0, revenue: 0 };
-      }
-      acc[date].appointments++;
-      acc[date].revenue += appointment.services?.price || 0;
-      return acc;
-    }, {});
+    const dailyStats = dailyStatsData?.reduce(
+      (
+        acc: Record<string, { appointments: number; revenue: number }>,
+        appointment: any
+      ) => {
+        const date = new Date(appointment.start_time)
+          .toISOString()
+          .split("T")[0];
+        if (!acc[date]) {
+          acc[date] = { appointments: 0, revenue: 0 };
+        }
+        acc[date].appointments++;
+
+        // Access price safely with proper type checking
+        let price = 0;
+        if (appointment.services && typeof appointment.services === "object") {
+          price =
+            typeof appointment.services.price === "number"
+              ? appointment.services.price
+              : 0;
+        }
+        acc[date].revenue += price;
+
+        return acc;
+      },
+      {}
+    );
 
     // Convert to array and sort by date
     const dailyStatsArray = Object.entries(dailyStats || {})
@@ -370,16 +414,27 @@ export const GET = async (request: NextRequest) => {
       .lte("start_time", endDateStr);
 
     // Process top services
-    const servicesCount = topServicesData?.reduce((acc: any, appointment) => {
-      const serviceName = appointment.services?.name || "Desconhecido";
-      acc[serviceName] = (acc[serviceName] || 0) + 1;
-      return acc;
-    }, {});
+    const servicesCount = topServicesData?.reduce(
+      (acc: Record<string, number>, appointment: any) => {
+        // Extract service name safely with proper type checking
+        let serviceName = "Desconhecido";
+        if (appointment.services && typeof appointment.services === "object") {
+          serviceName =
+            typeof appointment.services.name === "string"
+              ? appointment.services.name
+              : "Desconhecido";
+        }
 
-    const totalServicesCount = Object.values(servicesCount || {}).reduce(
-      (a: any, b: any) => a + b,
-      0
+        acc[serviceName] = (acc[serviceName] || 0) + 1;
+        return acc;
+      },
+      {}
     );
+
+    // Calculate total services with proper typing
+    const totalServicesCount: number = Object.values(
+      servicesCount || {}
+    ).reduce((a: number, b: number) => a + b, 0);
 
     const topServices = Object.entries(servicesCount || {})
       .map(([name, count]: [string, any]) => ({
@@ -390,7 +445,151 @@ export const GET = async (request: NextRequest) => {
       .sort((a, b) => b.count - a.count)
       .slice(0, 5);
 
-    // Prepare response with charts data
+    // Get top professional (with most appointments)
+    const { data: topProfessionalData } = await supabase
+      .from("appointments")
+      .select(
+        `
+        professional_id,
+        professionals:professional_id (id, name)
+      `
+      )
+      .eq("business_id", businessId)
+      .gte("start_time", startDateStr)
+      .lte("start_time", endDateStr);
+
+    // Count appointments per professional
+    const professionalAppointments = topProfessionalData?.reduce(
+      (acc: Record<string, number>, appointment: any) => {
+        const professionalId = appointment.professional_id?.toString();
+        if (professionalId) {
+          acc[professionalId] = (acc[professionalId] || 0) + 1;
+        }
+        return acc;
+      },
+      {}
+    );
+
+    // Find professional with most appointments
+    let topProfessional: { id: string; name: string; count: number } | null =
+      null;
+    let maxAppointments = 0;
+
+    interface ProfessionalData {
+      professional_id: string | number;
+      professionals: {
+        id?: string | number;
+        name?: string;
+      } | null;
+    }
+
+    if (professionalAppointments && topProfessionalData) {
+      Object.entries(professionalAppointments).forEach(
+        ([professionalId, count]) => {
+          if (count > maxAppointments) {
+            maxAppointments = count;
+            // Find the professional data
+            const professional = topProfessionalData.find(
+              (p: ProfessionalData) =>
+                String(p.professional_id) === professionalId
+            );
+            if (professional?.professionals) {
+              topProfessional = {
+                id: professionalId,
+                name: String(professional.professionals.name || "Desconhecido"),
+                count: count,
+              };
+            }
+          }
+        }
+      );
+    }
+
+    // Get top client (with most appointments)
+    const { data: topClientData } = await supabase
+      .from("appointments")
+      .select(
+        `
+        client_id,
+        clients:client_id (id, name)
+      `
+      )
+      .eq("business_id", businessId)
+      .gte("start_time", startDateStr)
+      .lte("start_time", endDateStr);
+
+    // Count appointments per client
+    const clientAppointments = topClientData?.reduce(
+      (acc: Record<string, number>, appointment: any) => {
+        const clientId = appointment.client_id?.toString();
+        if (clientId) {
+          acc[clientId] = (acc[clientId] || 0) + 1;
+        }
+        return acc;
+      },
+      {}
+    );
+
+    // Find client with most appointments
+    let topClient: { id: string; name: string; count: number } | null = null;
+    maxAppointments = 0;
+
+    interface ClientData {
+      client_id: string | number;
+      clients: {
+        id?: string | number;
+        name?: string;
+      } | null;
+    }
+
+    if (clientAppointments && topClientData) {
+      Object.entries(clientAppointments).forEach(([clientId, count]) => {
+        if (count > maxAppointments) {
+          maxAppointments = count;
+          // Find the client data
+          const client = topClientData.find(
+            (c: ClientData) => String(c.client_id) === clientId
+          );
+          if (client?.clients) {
+            topClient = {
+              id: clientId,
+              name: String(client.clients.name || "Desconhecido"),
+              count: count,
+            };
+          }
+        }
+      });
+    }
+
+    // After calculating topProfessional, add this code to get top 5 professionals
+    const topProfessionals = professionalAppointments
+      ? Object.entries(professionalAppointments)
+          .map(([professionalId, count]) => {
+            const professional = topProfessionalData?.find(
+              (p) => p.professional_id?.toString() === professionalId
+            );
+            const name = professional?.professionals?.name || "Desconhecido";
+            return { id: professionalId, name, count };
+          })
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 5)
+      : [];
+
+    // After calculating topClient, add this code to get top 5 clients
+    const topClients = clientAppointments
+      ? Object.entries(clientAppointments)
+          .map(([clientId, count]) => {
+            const client = topClientData?.find(
+              (c) => c.client_id?.toString() === clientId
+            );
+            const name = client?.clients?.name || "Desconhecido";
+            return { id: clientId, name, count };
+          })
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 5)
+      : [];
+
+    // Prepare response with charts data and new professional/client info
     const response: DashboardResponse = {
       period,
       summary: {
@@ -410,12 +609,19 @@ export const GET = async (request: NextRequest) => {
           total: totalRevenue,
           change: revenueChange,
         },
+        professionals: {
+          count: professionalsCount || 0,
+        },
+        topProfessional,
+        topClient,
       },
       recentAppointments: recentAppointments || [],
       professionals: professionals,
       charts: {
         dailyStats: dailyStatsArray,
         topServices,
+        topProfessionals,
+        topClients,
       },
     };
 

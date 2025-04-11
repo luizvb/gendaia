@@ -29,7 +29,31 @@ import {
   Pie,
   Cell,
   Legend,
+  BarChart,
+  Bar,
+  LabelList,
 } from "recharts";
+import {
+  format,
+  addDays,
+  startOfWeek,
+  endOfWeek,
+  subWeeks,
+  subMonths,
+  startOfMonth,
+  endOfMonth,
+  addMonths,
+} from "date-fns";
+import { ptBR } from "date-fns/locale";
+import { Button } from "@/components/ui/button";
+import { CalendarIcon, ChevronLeft, ChevronRight } from "lucide-react";
+import { cn } from "@/lib/utils";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 
 // Define types for the dashboard data
 type DashboardData = {
@@ -51,6 +75,19 @@ type DashboardData = {
       total: number;
       change: number;
     };
+    professionals: {
+      count: number;
+    };
+    topProfessional: {
+      id: string;
+      name: string;
+      count: number;
+    } | null;
+    topClient: {
+      id: string;
+      name: string;
+      count: number;
+    } | null;
   };
   recentAppointments: Array<{
     id: string;
@@ -88,6 +125,16 @@ type DashboardData = {
       count: number;
       percentage: number;
     }>;
+    topProfessionals: Array<{
+      id: string;
+      name: string;
+      count: number;
+    }>;
+    topClients: Array<{
+      id: string;
+      name: string;
+      count: number;
+    }>;
   };
 };
 
@@ -100,12 +147,35 @@ export default function DashboardPage() {
   );
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const [date, setDate] = useState<Date>(new Date());
 
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
         setIsLoading(true);
-        const response = await fetch(`/api/dashboard?period=${period}`);
+
+        let startDate: string;
+        let endDate: string;
+
+        if (period === "daily") {
+          startDate = format(date, "yyyy-MM-dd");
+          endDate = format(date, "yyyy-MM-dd");
+        } else if (period === "weekly") {
+          const start = startOfWeek(date, { locale: ptBR });
+          const end = endOfWeek(date, { locale: ptBR });
+          startDate = format(start, "yyyy-MM-dd");
+          endDate = format(end, "yyyy-MM-dd");
+        } else {
+          // monthly
+          const start = startOfMonth(date);
+          const end = endOfMonth(date);
+          startDate = format(start, "yyyy-MM-dd");
+          endDate = format(end, "yyyy-MM-dd");
+        }
+
+        const response = await fetch(
+          `/api/dashboard?period=${period}&startDate=${startDate}&endDate=${endDate}`
+        );
         if (!response.ok) throw new Error("Failed to fetch dashboard data");
         const data = await response.json();
         setDashboardData(data);
@@ -120,7 +190,7 @@ export default function DashboardPage() {
     // Refresh every 5 minutes
     const interval = setInterval(fetchDashboardData, 300000);
     return () => clearInterval(interval);
-  }, [period]);
+  }, [period, date]);
 
   // Format currency
   const formatCurrency = (value: number): string => {
@@ -159,17 +229,41 @@ export default function DashboardPage() {
     });
   };
 
-  // Get period description
+  // Get period description with date range
   const getPeriodDescription = () => {
     switch (period) {
       case "daily":
-        return "Hoje";
-      case "weekly":
-        return "Últimos 7 dias";
+        return format(date, "dd 'de' MMMM, yyyy", { locale: ptBR });
+      case "weekly": {
+        const start = startOfWeek(date, { locale: ptBR });
+        const end = endOfWeek(date, { locale: ptBR });
+        return `${format(start, "dd/MM")} - ${format(end, "dd/MM/yyyy")}`;
+      }
       case "monthly":
-        return "Últimos 30 dias";
+        return format(date, "MMMM 'de' yyyy", { locale: ptBR });
       default:
         return "Últimos 7 dias";
+    }
+  };
+
+  // Navigation functions
+  const prevDate = () => {
+    if (period === "daily") {
+      setDate((prev) => addDays(prev, -1));
+    } else if (period === "weekly") {
+      setDate((prev) => subWeeks(prev, 1));
+    } else {
+      setDate((prev) => subMonths(prev, 1));
+    }
+  };
+
+  const nextDate = () => {
+    if (period === "daily") {
+      setDate((prev) => addDays(prev, 1));
+    } else if (period === "weekly") {
+      setDate((prev) => addDays(prev, 7));
+    } else {
+      setDate((prev) => addMonths(prev, 1));
     }
   };
 
@@ -223,22 +317,84 @@ export default function DashboardPage() {
 
   return (
     <div className="container mx-auto p-4">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
         <h1 className="text-2xl font-bold">Dashboard</h1>
-        <Select value={period} onValueChange={setPeriod}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Selecione o período" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="daily">Diário</SelectItem>
-            <SelectItem value="weekly">Semanal</SelectItem>
-            <SelectItem value="monthly">Mensal</SelectItem>
-          </SelectContent>
-        </Select>
+
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          {/* Period selector */}
+          <Select value={period} onValueChange={setPeriod}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Selecione o período" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="daily">Diário</SelectItem>
+              <SelectItem value="weekly">Semanal</SelectItem>
+              <SelectItem value="monthly">Mensal</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {/* Date navigation */}
+          <div className="flex items-center gap-1">
+            <Button variant="outline" size="icon" onClick={prevDate}>
+              <ChevronLeft className="h-4 w-4" />
+              <span className="sr-only">Anterior</span>
+            </Button>
+
+            {/* Date selector that changes based on period */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  className={cn("w-auto justify-start text-left font-normal")}
+                >
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {getPeriodDescription()}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                {period === "daily" ? (
+                  <CalendarComponent
+                    mode="single"
+                    selected={date}
+                    onSelect={(selectedDate: Date | undefined) => {
+                      if (selectedDate) {
+                        setDate(selectedDate);
+                      }
+                    }}
+                    defaultMonth={date}
+                    initialFocus
+                  />
+                ) : period === "weekly" ? (
+                  <CalendarComponent
+                    mode="range"
+                    onSelect={(range) => {
+                      if (range?.from) {
+                        setDate(range.from);
+                      }
+                    }}
+                    defaultMonth={date}
+                    initialFocus
+                  />
+                ) : (
+                  <CalendarComponent
+                    mode="default"
+                    defaultMonth={date}
+                    initialFocus
+                  />
+                )}
+              </PopoverContent>
+            </Popover>
+
+            <Button variant="outline" size="icon" onClick={nextDate}>
+              <ChevronRight className="h-4 w-4" />
+              <span className="sr-only">Próximo</span>
+            </Button>
+          </div>
+        </div>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-6">
+      <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-5 mb-6">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Agendamentos</CardTitle>
@@ -282,6 +438,19 @@ export default function DashboardPage() {
               {dashboardData.summary.services.change}% em relação ao período
               anterior
             </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Profissionais</CardTitle>
+            <Users className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {dashboardData.summary.professionals.count}
+            </div>
+            <p className="text-xs text-muted-foreground">Total no sistema</p>
           </CardContent>
         </Card>
         <Card>
@@ -407,6 +576,101 @@ export default function DashboardPage() {
                   </ul>
                 </div>
               </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Top Professionals and Clients Section */}
+      <div className="grid gap-6 md:grid-cols-2 mb-6">
+        {/* Top Professionals Bar Chart */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Profissionais com mais atendimentos</CardTitle>
+            <CardDescription>{getPeriodDescription()}</CardDescription>
+          </CardHeader>
+          <CardContent className="h-[300px]">
+            {isLoading ? (
+              <Skeleton className="w-full h-full" />
+            ) : dashboardData.charts.topProfessionals.length === 0 ? (
+              <div className="flex items-center justify-center h-full text-muted-foreground">
+                Nenhum atendimento realizado no período
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={dashboardData.charts.topProfessionals}
+                  layout="vertical"
+                  margin={{ top: 20, right: 30, left: 100, bottom: 5 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis type="number" />
+                  <YAxis
+                    type="category"
+                    dataKey="name"
+                    width={90}
+                    tickFormatter={(value) =>
+                      value.length > 15 ? `${value.substring(0, 15)}...` : value
+                    }
+                  />
+                  <Tooltip
+                    formatter={(value: any) => [
+                      `${value} atendimentos`,
+                      "Quantidade",
+                    ]}
+                    labelFormatter={(name) => `Profissional: ${name}`}
+                  />
+                  <Bar dataKey="count" fill="#0088FE" radius={[0, 4, 4, 0]}>
+                    <LabelList dataKey="count" position="right" />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Top Clients Bar Chart */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Clientes com mais atendimentos</CardTitle>
+            <CardDescription>{getPeriodDescription()}</CardDescription>
+          </CardHeader>
+          <CardContent className="h-[300px]">
+            {isLoading ? (
+              <Skeleton className="w-full h-full" />
+            ) : dashboardData.charts.topClients.length === 0 ? (
+              <div className="flex items-center justify-center h-full text-muted-foreground">
+                Nenhum atendimento no período
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={dashboardData.charts.topClients}
+                  layout="vertical"
+                  margin={{ top: 20, right: 30, left: 100, bottom: 5 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis type="number" />
+                  <YAxis
+                    type="category"
+                    dataKey="name"
+                    width={90}
+                    tickFormatter={(value) =>
+                      value.length > 15 ? `${value.substring(0, 15)}...` : value
+                    }
+                  />
+                  <Tooltip
+                    formatter={(value: any) => [
+                      `${value} visitas`,
+                      "Quantidade",
+                    ]}
+                    labelFormatter={(name) => `Cliente: ${name}`}
+                  />
+                  <Bar dataKey="count" fill="#00C49F" radius={[0, 4, 4, 0]}>
+                    <LabelList dataKey="count" position="right" />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
             )}
           </CardContent>
         </Card>
