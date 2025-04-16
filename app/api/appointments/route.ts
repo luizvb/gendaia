@@ -516,14 +516,14 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Get the appointment data for the cancellation notification
-    const { data: appointment } = await supabase
+    const { data: appointment, error: fetchError } = await supabase
       .from("appointments")
       .select("*")
       .eq("id", id)
       .eq("business_id", businessId)
       .single();
 
-    if (!appointment) {
+    if (fetchError || !appointment) {
       return NextResponse.json(
         { error: "Appointment not found" },
         { status: 404 }
@@ -542,29 +542,43 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Send WhatsApp notification if enabled
-    try {
-      const notificationService = new NotificationService();
+    // Store appointment data for notifications before returning response
+    const appointmentData = { ...appointment };
 
-      // Get notification preferences
-      const preferences = await notificationService.getNotificationPreferences(
-        businessId
-      );
+    // Send WhatsApp notification asynchronously
+    const notificationPromise = (async () => {
+      try {
+        const notificationService = new NotificationService();
+        const preferences =
+          await notificationService.getNotificationPreferences(businessId);
 
-      // Send cancellation notification if enabled
-      if (preferences && preferences.appointment_cancellation) {
-        await notificationService.sendAppointmentCancellation(
-          businessId,
-          appointment
+        if (preferences?.appointment_cancellation) {
+          // Set a timeout for the notification to prevent hanging
+          const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error("Notification timeout")), 3000)
+          );
+
+          await Promise.race([
+            notificationService.sendAppointmentCancellation(
+              businessId,
+              appointmentData
+            ),
+            timeoutPromise,
+          ]);
+        }
+      } catch (notificationError) {
+        console.error(
+          "Error sending cancellation notification:",
+          notificationError
         );
+        // Don't throw - this is background processing
       }
-    } catch (notificationError) {
-      // Log but don't fail the appointment deletion if notification fails
-      console.error(
-        "Error sending appointment cancellation notification:",
-        notificationError
-      );
-    }
+    })();
+
+    // Fire and forget - don't wait for the notification
+    notificationPromise.catch((err) =>
+      console.error("Background cancellation notification failed:", err)
+    );
 
     return NextResponse.json({ success: true });
   } catch (error) {
