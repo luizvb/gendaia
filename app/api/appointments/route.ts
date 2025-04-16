@@ -127,6 +127,13 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Fetch service data in parallel with client operations
+    const servicePromise = supabase
+      .from("services")
+      .select("duration")
+      .eq("id", body.service_id)
+      .single();
+
     // Buscar ou criar cliente
     let clientId = body.client_id;
     if (!clientId) {
@@ -166,34 +173,53 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Calculate end_time based on service duration
-    const { data: service } = await supabase
-      .from("services")
-      .select("duration")
-      .eq("id", body.service_id)
-      .single();
+    // Resolve service promise
+    const { data: service, error: serviceError } = await servicePromise;
 
-    if (!service) {
+    if (serviceError || !service) {
+      console.error("Error fetching service:", serviceError);
       return NextResponse.json({ error: "Service not found" }, { status: 404 });
     }
 
     const startTime = new Date(body.start_time);
     const endTime = new Date(startTime.getTime() + service.duration * 60000);
 
-    // Verificar se há conflito com outros agendamentos do mesmo profissional
+    // Check for appointment conflicts more efficiently
+    const dayStart = format(startTime, "yyyy-MM-dd") + "T00:00:00";
+    const dayEnd = format(startTime, "yyyy-MM-dd") + "T23:59:59";
+
     const { data: existingAppointments, error: conflictError } = await supabase
       .from("appointments")
       .select("start_time, end_time")
       .eq("professional_id", body.professional_id)
       .eq("business_id", businessId)
-      .gte("start_time", format(startTime, "yyyy-MM-dd") + "T00:00:00")
-      .lt("start_time", format(startTime, "yyyy-MM-dd") + "T23:59:59");
+      .gte("start_time", dayStart)
+      .lt("start_time", dayEnd);
 
     if (conflictError) {
       console.error("Error checking for conflicts:", conflictError);
       return NextResponse.json(
         { error: "Failed to check appointment conflicts" },
         { status: 500 }
+      );
+    }
+
+    // Check for actual time conflicts
+    const hasConflict = existingAppointments.some((appointment) => {
+      const appointmentStart = new Date(appointment.start_time);
+      const appointmentEnd = new Date(appointment.end_time);
+
+      return (
+        (startTime < appointmentEnd && endTime > appointmentStart) ||
+        startTime.getTime() === appointmentStart.getTime() ||
+        endTime.getTime() === appointmentEnd.getTime()
+      );
+    });
+
+    if (hasConflict) {
+      return NextResponse.json(
+        { error: "Este horário já está ocupado para este profissional" },
+        { status: 409 }
       );
     }
 
@@ -219,31 +245,45 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Send WhatsApp notification if enabled
-    try {
-      const notificationService = new NotificationService();
+    // Return the appointment immediately and handle notifications asynchronously
+    const appointment = data[0];
 
-      // Get notification preferences
-      const preferences = await notificationService.getNotificationPreferences(
-        businessId
-      );
+    // Send notifications in the background
+    const notificationPromise = (async () => {
+      try {
+        const notificationService = new NotificationService();
+        const preferences =
+          await notificationService.getNotificationPreferences(businessId);
 
-      // Send confirmation if enabled
-      if (preferences && preferences.appointment_confirmation) {
-        await notificationService.sendAppointmentConfirmation(
-          businessId,
-          data[0]
+        if (preferences?.appointment_confirmation) {
+          // Set a timeout for the notification to prevent hanging
+          const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error("Notification timeout")), 3000)
+          );
+
+          await Promise.race([
+            notificationService.sendAppointmentConfirmation(
+              businessId,
+              appointment
+            ),
+            timeoutPromise,
+          ]);
+        }
+      } catch (notificationError) {
+        console.error(
+          "Error sending appointment notification:",
+          notificationError
         );
+        // Don't throw - this is background processing
       }
-    } catch (notificationError) {
-      // Log but don't fail the appointment creation if notification fails
-      console.error(
-        "Error sending appointment notification:",
-        notificationError
-      );
-    }
+    })();
 
-    return NextResponse.json(data[0], { status: 201 });
+    // Fire and forget - don't wait for the notification
+    notificationPromise.catch((err) =>
+      console.error("Background notification processing failed:", err)
+    );
+
+    return NextResponse.json(appointment, { status: 201 });
   } catch (error) {
     console.error("Error in appointments API:", error);
     return NextResponse.json(
