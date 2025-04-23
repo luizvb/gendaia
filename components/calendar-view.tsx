@@ -901,7 +901,7 @@ export function CalendarView() {
             </TabsList>
           </Tabs>
 
-          <div className="flex border rounded-md bg-muted p-1">
+          <div className="flex border rounded-md bg-muted p-1 md:flex hidden">
             <Button
               variant="ghost"
               size="sm"
