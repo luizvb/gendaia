@@ -57,6 +57,7 @@ export async function middleware(request: NextRequest) {
     const isPublicRoute = publicRoutes.some((route) =>
       request.nextUrl.pathname.startsWith(route)
     );
+    const isLoginRoute = request.nextUrl.pathname.startsWith("/login");
 
     const isRootRoute = request.nextUrl.pathname === "/";
 
@@ -71,6 +72,13 @@ export async function middleware(request: NextRequest) {
         return NextResponse.redirect(url);
       }
     } else {
+      // Redirect authenticated users from root path to dashboard
+      if (isRootRoute || isLoginRoute) {
+        const url = request.nextUrl.clone();
+        url.pathname = "/dashboard/calendar";
+        return NextResponse.redirect(url);
+      }
+
       // Primeiro, verifica o business_id para qualquer rota autenticada
       try {
         const { data: profile } = await supabase
