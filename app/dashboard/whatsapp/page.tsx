@@ -109,6 +109,7 @@ export default function WhatsAppPage() {
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isActive, setIsActive] = useState(false);
+  const [sessionStatus, setSessionStatus] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [phoneNumber, setPhoneNumber] = useState("");
   const [messageText, setMessageText] = useState("");
@@ -121,6 +122,10 @@ export default function WhatsAppPage() {
   const [selectedClients, setSelectedClients] = useState<Client[]>([]);
   const [selectAllChecked, setSelectAllChecked] = useState(false);
   const [messageDelay, setMessageDelay] = useState(2000);
+  const [userPhoneNumber, setUserPhoneNumber] = useState("");
+  const [isCreatingInstance, setIsCreatingInstance] = useState(false);
+  const [instanceCreated, setInstanceCreated] = useState(false);
+  const [isDeletingInstance, setIsDeletingInstance] = useState(false);
   const [agentSettings, setAgentSettings] = useState<AgentSettings>({
     enabled: false,
     name: "Luiza",
@@ -196,16 +201,41 @@ export default function WhatsAppPage() {
   };
 
   const checkSessionStatus = async (id: string) => {
+    setSessionStatus(null);
+    setIsLoading(true);
     const supabase = createClient();
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("whatsapp_sessions")
       .select("*")
       .eq("business_id", id)
       .order("updated_at", { ascending: false })
       .limit(1);
 
-    // If there's data and status is connected, set isActive to true
-    setIsActive(!!(data && data.length > 0 && data[0].status === "CONNECTED"));
+    if (error) {
+      console.error("Error fetching session status:", error);
+      toast({
+        title: "Erro ao verificar status",
+        description: "Não foi possível obter o status da sessão.",
+        variant: "destructive",
+      });
+      setSessionStatus("error");
+      setIsActive(false);
+      setInstanceCreated(false);
+    } else if (data && data.length > 0) {
+      const currentStatus = data[0].status?.toUpperCase();
+      setSessionStatus(currentStatus);
+      setIsActive(currentStatus === "CONNECTED" || currentStatus === "OPEN");
+      setInstanceCreated(true);
+      if (currentStatus !== "CONNECTED" && currentStatus !== "OPEN") {
+        setQrCode(null);
+      }
+    } else {
+      setSessionStatus("NOT_FOUND");
+      setIsActive(false);
+      setInstanceCreated(false);
+      setQrCode(null);
+    }
+    setIsLoading(false);
   };
 
   const loadMessages = async (id: string) => {
@@ -316,57 +346,237 @@ export default function WhatsAppPage() {
   const handleInitSession = async () => {
     if (!businessId) {
       toast({
-        title: "Erro ao inicializar WhatsApp",
-        description: "ID da empresa não encontrado",
+        title: "Erro",
+        description: "ID da empresa não encontrado.",
         variant: "destructive",
       });
       return;
     }
+
+    const normalizedPhone = normalizePhoneNumber(userPhoneNumber);
+    if (!normalizedPhone || normalizedPhone.length < 10) {
+      toast({
+        title: "Número Inválido",
+        description:
+          "Por favor, insira um número de WhatsApp válido com código do país e DDD.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsCreatingInstance(true);
+    setIsLoading(true);
+
+    try {
+      const createInstanceResponse = await fetch(
+        `${process.env.NEXT_PUBLIC_API_GENDAIA_EXTERNAL_URL}/api/evolution/instances`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            instanceName: businessId,
+            businessId: businessId,
+            number: normalizedPhone,
+          }),
+        }
+      );
+
+      if (!createInstanceResponse.ok) {
+        const errorData = await createInstanceResponse.json();
+        throw new Error(
+          `Falha ao criar instância: ${
+            errorData.message || createInstanceResponse.statusText
+          }`
+        );
+      }
+
+      toast({
+        title: "Instância Criada",
+        description:
+          "Instância do WhatsApp criada com sucesso. Clique em Conectar para obter o QR Code.",
+      });
+      setIsCreatingInstance(false);
+      setInstanceCreated(true);
+      setQrCode(null);
+      setIsLoading(false);
+    } catch (error: any) {
+      console.error("Erro ao criar instância:", error);
+      toast({
+        title: "Erro ao criar instância",
+        description: error.message || "Ocorreu um erro inesperado.",
+        variant: "destructive",
+      });
+      setInstanceCreated(false);
+    } finally {
+      setIsCreatingInstance(false);
+    }
+  };
+
+  // New function to update instance status to CONNECTED
+  const updateInstanceStatusToConnected = async (id: string) => {
+    try {
+      const updateStatusResponse = await fetch(
+        `${process.env.NEXT_PUBLIC_API_GENDAIA_EXTERNAL_URL}/api/evolution/instances/${id}/status`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: "CONNECTED" }),
+        }
+      );
+      if (!updateStatusResponse.ok) {
+        const errorData = await updateStatusResponse.json();
+        console.error(
+          "Failed to update instance status to CONNECTED:",
+          errorData
+        );
+        toast({
+          title: "Erro ao finalizar",
+          description: "Não foi possível atualizar o status da conexão.",
+          variant: "destructive",
+        });
+      } else {
+        console.log("Instance status updated to CONNECTED");
+        // Optionally trigger a state update or immediate check
+        // setSessionStatus("CONNECTED");
+        // setIsActive(true);
+        // checkSessionStatus(id); // Or check immediately instead of waiting for setTimeout
+      }
+    } catch (statusUpdateError) {
+      console.error("Error updating instance status:", statusUpdateError);
+      toast({
+        title: "Erro ao finalizar",
+        description: "Não foi possível atualizar o status da conexão.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleConnect = async () => {
+    if (!businessId) return;
+
+    // Check if QR code was already present (meaning user clicked "Finalizar configuração")
+    const wasQrCodeAlreadyPresent = Boolean(qrCode);
 
     setIsLoading(true);
-    const { qrCode, error } = await whatsappService.initSession({ businessId });
-    setIsLoading(false);
-
-    if (error) {
-      toast({
-        title: "Erro ao inicializar WhatsApp",
-        description: error,
-        variant: "destructive",
-      });
-      return;
+    // Clear existing QR code *only* if we are fetching a new one
+    if (!wasQrCodeAlreadyPresent) {
+      setQrCode(null);
     }
 
-    setQrCode(qrCode);
+    try {
+      const connectResponse = await fetch(
+        `${process.env.NEXT_PUBLIC_API_GENDAIA_EXTERNAL_URL}/api/evolution/instances/${businessId}/connect`,
+        {
+          method: "GET",
+        }
+      );
 
-    // Check status after a delay to see if connection was successful
-    setTimeout(() => checkSessionStatus(businessId), 30000);
+      if (!connectResponse.ok) {
+        const errorData = await connectResponse.json();
+        throw new Error(
+          `Falha ao obter QR Code: ${
+            errorData.message || connectResponse.statusText
+          }`
+        );
+      }
+
+      const connectData = await connectResponse.json();
+
+      // Extract the base64 QR code from the response structure
+      const receivedQrCode = connectData?.connection?.base64;
+
+      if (
+        receivedQrCode &&
+        typeof receivedQrCode === "string" &&
+        receivedQrCode.startsWith("data:image/png;base64,")
+      ) {
+        // Only set QR code if it wasn't already present or if it changed
+        // (Though typically connectResponse returns null if already connected)
+        if (!wasQrCodeAlreadyPresent || qrCode !== receivedQrCode) {
+          setQrCode(receivedQrCode);
+          toast({
+            title: "QR Code Recebido",
+            description: "Escaneie o QR Code com seu WhatsApp.",
+          });
+        } else {
+          // If QR was already present and didn't change, maybe just update status
+          toast({
+            title: "Finalizando Conexão...",
+            description: "Aguarde enquanto verificamos a conexão.",
+          });
+        }
+
+        // Only send PATCH if the user clicked "Finalizar configuração"
+        if (wasQrCodeAlreadyPresent) {
+          await updateInstanceStatusToConnected(businessId); // Call the extracted function
+        }
+
+        // Always check status after a delay
+        setTimeout(() => checkSessionStatus(businessId), 30000);
+      } else {
+        // Handle cases where API might return OK but no QR (e.g., already connected)
+        if (wasQrCodeAlreadyPresent) {
+          // Assume connection is likely okay if QR was present, try updating status
+          console.log(
+            "No new QR code received, assuming connection is establishing/established."
+          );
+          await updateInstanceStatusToConnected(businessId); // Call the extracted function
+          setTimeout(() => checkSessionStatus(businessId), 5000); // Check sooner
+        } else {
+          // This case means "Gerar QR Code" was clicked, but no QR was received
+          throw new Error(
+            "QR Code (base64) não recebido ou em formato inválido na resposta da API."
+          );
+        }
+      }
+    } catch (error: any) {
+      console.error("Erro ao conectar/obter QR Code:", error);
+      toast({
+        title: "Erro ao conectar/obter QR Code",
+        description: error.message || "Ocorreu um erro inesperado.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleDisconnect = async () => {
     if (!businessId) return;
 
     setIsLoading(true);
-    const { success, error } = await whatsappService.disconnectSession(
-      businessId
-    );
-    setIsLoading(false);
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_GENDAIA_EXTERNAL_URL}/api/evolution/instances/${businessId}/logout`,
+        {
+          method: "DELETE",
+        }
+      );
 
-    if (error) {
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(
+          `Falha ao desconectar: ${errorData.message || response.statusText}`
+        );
+      }
+
+      setIsActive(false);
+      setQrCode(null);
+      setUserPhoneNumber("");
+      toast({
+        title: "WhatsApp Desconectado",
+        description: "Sessão encerrada com sucesso.",
+      });
+    } catch (error: any) {
+      console.error("Erro ao desconectar WhatsApp:", error);
       toast({
         title: "Erro ao desconectar WhatsApp",
-        description: error,
+        description: error.message || "Ocorreu um erro inesperado.",
         variant: "destructive",
       });
-      return;
+    } finally {
+      setIsLoading(false);
     }
-
-    setIsActive(false);
-    setQrCode(null);
-
-    toast({
-      title: "WhatsApp desconectado",
-      description: "Sessão encerrada com sucesso",
-    });
   };
 
   const handleSendMessage = async () => {
@@ -456,13 +666,16 @@ export default function WhatsAppPage() {
 
     setIsSavingAgentSettings(true);
     try {
-      const response = await fetch(`/api/chat/agent-settings`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(agentSettings),
-      });
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_GENDAIA_EXTERNAL_URL}/api/chat/agent-settings`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(agentSettings),
+        }
+      );
 
       if (!response.ok) {
         throw new Error("Failed to save agent settings");
@@ -518,6 +731,58 @@ export default function WhatsAppPage() {
 
   const isClientSelected = (client: Client) => {
     return selectedClients.some((c) => c.id === client.id);
+  };
+
+  // Function to handle instance deletion
+  const handleDeleteInstance = async () => {
+    if (!businessId) return;
+
+    // Optional: Add a confirmation dialog here
+
+    setIsDeletingInstance(true);
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_GENDAIA_EXTERNAL_URL}/api/evolution/instances/${businessId}`,
+        {
+          method: "DELETE",
+        }
+      );
+
+      if (!response.ok) {
+        // Handle cases where deletion might fail but instance is gone (e.g., 404)
+        if (response.status === 404) {
+          console.log("Instance already deleted or not found on server.");
+        } else {
+          const errorData = await response.json();
+          throw new Error(
+            `Falha ao deletar instância: ${
+              errorData.message || response.statusText
+            }`
+          );
+        }
+      }
+
+      // Update state regardless of 404, as the goal is to remove it locally
+      setInstanceCreated(false);
+      setIsActive(false);
+      setQrCode(null);
+      setSessionStatus("NOT_FOUND");
+      setUserPhoneNumber(""); // Clear phone number
+
+      toast({
+        title: "Instância Deletada",
+        description: "A instância do WhatsApp foi removida com sucesso.",
+      });
+    } catch (error: any) {
+      console.error("Erro ao deletar instância:", error);
+      toast({
+        title: "Erro ao deletar instância",
+        description: error.message || "Ocorreu um erro inesperado.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeletingInstance(false);
+    }
   };
 
   return (
@@ -612,7 +877,7 @@ export default function WhatsAppPage() {
                     Seu WhatsApp está conectado e pronto para uso.
                   </p>
                 </div>
-              ) : qrCode ? (
+              ) : qrCode || instanceCreated ? (
                 <div className="flex flex-col items-center justify-center p-6 bg-blue-500/10 dark:bg-blue-500/20 rounded-lg border border-blue-200 dark:border-blue-800">
                   <div className="mb-4 text-center">
                     <QrCode className="h-10 w-10 text-blue-500 dark:text-blue-400 mx-auto mb-3" />
@@ -656,18 +921,55 @@ export default function WhatsAppPage() {
                     <Smartphone className="h-4 w-4 mr-2" />
                     <span>Mantenha seu celular próximo para escanear</span>
                   </div>
+
+                  <div className="flex items-center mt-4 text-sm text-muted-foreground">
+                    <span>
+                      Quando ler o QR Code, clique no botão abaixo (Finalizar
+                      Configuração)
+                    </span>
+                  </div>
+                  <div className="flex items-center mt-4 text-sm text-muted-foreground">
+                    <span>
+                      Se tiver algum problema, clique no botão (Desconectar
+                      WhatsApp) e tente novamente
+                    </span>
+                  </div>
                 </div>
               ) : (
-                <div className="flex flex-col items-center justify-center p-6 bg-muted rounded-lg border border-border">
-                  <QrCode className="h-12 w-12 text-muted-foreground mb-3" />
-                  <p className="text-sm text-muted-foreground mb-4">
-                    Clique no botão abaixo para configurar o WhatsApp para sua
-                    empresa
+                <div className="flex flex-col items-center justify-center p-6 bg-muted rounded-lg border border-border space-y-4">
+                  <Smartphone className="h-12 w-12 text-muted-foreground mb-3" />
+                  <p className="text-sm text-muted-foreground text-center">
+                    Para começar, insira o número de telefone WhatsApp que você
+                    usará para esta empresa.
                   </p>
+                  <div className="w-full max-w-sm space-y-2">
+                    <Label htmlFor="user-whatsapp-number">
+                      Número do WhatsApp
+                    </Label>
+                    <Input
+                      id="user-whatsapp-number"
+                      placeholder="+55 (11) 99999-9999"
+                      value={userPhoneNumber}
+                      onChange={(e) =>
+                        setUserPhoneNumber(formatPhoneNumber(e.target.value))
+                      }
+                      disabled={isLoading || isCreatingInstance}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Inclua o código do país (+55) e o DDD.
+                    </p>
+                  </div>
+                  {/* Show message if instance is created but not connected */}
+                  {instanceCreated && !qrCode && !isActive && (
+                    <p className="text-sm text-green-600 dark:text-green-400 mt-4 text-center">
+                      Instância criada com sucesso. Clique no botão abaixo para
+                      conectar e obter o QR Code.
+                    </p>
+                  )}
                 </div>
               )}
             </CardContent>
-            <CardFooter className="flex justify-center">
+            <CardFooter className="flex flex-col sm:flex-row justify-center items-center gap-4">
               {isActive ? (
                 <Button
                   variant="destructive"
@@ -681,19 +983,91 @@ export default function WhatsAppPage() {
                   Desconectar WhatsApp
                 </Button>
               ) : (
+                <>
+                  {(() => {
+                    // Calculate button disabled state
+                    const isButtonDisabled =
+                      isCreatingInstance ||
+                      isLoading ||
+                      (!instanceCreated && !qrCode && !userPhoneNumber) ||
+                      // Disable only if status is known, not CLOSE/CONNECTING/NOT_FOUND, and no QR code is shown
+                      Boolean(
+                        sessionStatus &&
+                          !["CLOSE", "CONNECTING", "NOT_FOUND"].includes(
+                            sessionStatus
+                          ) &&
+                          !qrCode
+                      );
+
+                    // Determine button text and icon
+                    let buttonText = "Criar Instância";
+                    let ButtonIcon = Smartphone;
+                    let buttonAction = handleInitSession;
+
+                    if (isLoading) {
+                      buttonText =
+                        sessionStatus === "CLOSE" ||
+                        sessionStatus === "CONNECTING" ||
+                        qrCode
+                          ? "Obtendo QR Code..."
+                          : "Verificando...";
+                      ButtonIcon = Loader2;
+                    } else if (isCreatingInstance) {
+                      buttonText = "Criando Instância...";
+                      ButtonIcon = Loader2;
+                    } else if (qrCode) {
+                      buttonText = "Finalizar configuração";
+                      ButtonIcon = RefreshCw; // Use Refresh for re-generating QR
+                      buttonAction = handleConnect;
+                    } else if (
+                      sessionStatus === "CLOSE" ||
+                      sessionStatus === "CONNECTING" ||
+                      (instanceCreated &&
+                        !qrCode &&
+                        sessionStatus !== "CONNECTED" &&
+                        sessionStatus !== "OPEN")
+                    ) {
+                      buttonText = "GERAR QR CODE";
+                      ButtonIcon = QrCode;
+                      buttonAction = handleConnect;
+                    }
+
+                    return (
+                      <Button
+                        onClick={buttonAction}
+                        disabled={isButtonDisabled}
+                        className="px-6 py-2 shadow-sm transition-all hover:shadow"
+                      >
+                        <ButtonIcon
+                          className={`mr-2 h-4 w-4 ${
+                            isLoading || isCreatingInstance
+                              ? "animate-spin"
+                              : ""
+                          }`}
+                        />
+                        {buttonText}
+                      </Button>
+                    );
+                  })()}
+                </>
+              )}
+              {/* Add Delete Button if instance exists and not currently deleting */}
+              {instanceCreated && !isDeletingInstance && (
                 <Button
-                  onClick={handleInitSession}
-                  disabled={isLoading}
+                  variant="outline"
+                  onClick={handleDeleteInstance}
+                  disabled={isLoading || isCreatingInstance} // Disable if other main actions are loading
                   className="px-6 py-2 shadow-sm transition-all hover:shadow"
                 >
-                  {isLoading ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : qrCode ? (
-                    <RefreshCw className="mr-2 h-4 w-4" />
-                  ) : (
-                    <QrCode className="mr-2 h-4 w-4" />
-                  )}
-                  {qrCode ? "Gerar novo QR Code" : "Configurar WhatsApp"}
+                  <X className="mr-2 h-4 w-4" />
+                  Deletar Instância
+                </Button>
+              )}
+              {/* Show loading state for delete */}
+              {isDeletingInstance && (
+                <Button variant="outline" disabled className="px-6 py-2">
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Deletando...
                 </Button>
               )}
             </CardFooter>
